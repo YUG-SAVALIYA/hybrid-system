@@ -1,0 +1,5 @@
+fastapi
+starlette
+httpx
+pydantic
+anyio

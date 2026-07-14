@@ -1,0 +1,8 @@
+venv/
+node_modules/
+__pycache__/
+.env*
+# tests/
+# check_*
+# run_*
+# debug_*
