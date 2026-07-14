@@ -4,5 +4,5 @@ __pycache__/
 .env*
 # tests/
 # check_*
-# run_*
-# debug_*
+run_*
+debug_*
