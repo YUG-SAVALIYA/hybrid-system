@@ -39,7 +39,7 @@ def _build_service(
     company_rows: list,
     candle_by_symbol: dict[str, datetime.date],
     max_staleness: int = 3,
-    benchmark_code: str = "NIFTY_500",
+    benchmark_code: str = "NIFTY500",
     duplicate_bench_dates: bool = False,
 ):
     """
@@ -271,17 +271,17 @@ def test_no_nifty50_fallback_when_nifty500_missing():
     Service must return BENCHMARK_DATA_UNAVAILABLE even when NIFTY 50
     data would theoretically exist; benchmark_code is never changed.
     """
-    # Provide no NIFTY_500 data (empty list).
+    # Provide no NIFTY500 data (empty list).
     svc = _build_service(
         benchmark_dates=None,
         company_rows=[],
         candle_by_symbol={},
-        benchmark_code="NIFTY_500",
+        benchmark_code="NIFTY500",
     )
     result = svc.align("SHORT")
     assert result.status == "BENCHMARK_DATA_UNAVAILABLE"
     # Verify the benchmark code was never mutated to NIFTY_50 or similar.
-    assert svc._benchmark_code == "NIFTY_500"
+    assert svc._benchmark_code == "NIFTY500"
 
 
 # ------------------------------------------------------------------ #
@@ -325,7 +325,7 @@ def test_bulk_query_single_candle_fetch():
     svc = TechnicalDateAlignmentService(
         source_session=src_session,
         discovery_session=disc_session,
-        benchmark_code="NIFTY_500",
+        benchmark_code="NIFTY500",
     )
     result = svc.align("SHORT")
 

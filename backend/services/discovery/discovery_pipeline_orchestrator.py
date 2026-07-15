@@ -3,7 +3,10 @@ from __future__ import annotations
 
 import datetime
 import re
+import logging
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -13,7 +16,6 @@ from models.discovery import (
     CompanyTechnicalMetric,
     DiscoveryRun,
     DiscoverySelection,
-    GroupScore,
 )
 
 
@@ -49,66 +51,40 @@ E_SERVICE_NOT_CONFIGURED = "DISCOVERY_SERVICE_NOT_CONFIGURED"
 
 MACRO_SEARCH = "MACRO_SEARCH"
 MACRO_FILTER = "MACRO_FILTER"
-SECTOR_IMPACT = "SECTOR_IMPACT"
-SECTOR_MACRO_SCORE = "SECTOR_MACRO_SCORE"
-SECTOR_RANKING = "SECTOR_RANKING"
-INDUSTRY_IMPACT = "INDUSTRY_IMPACT"
-INDUSTRY_MACRO_SCORE = "INDUSTRY_MACRO_SCORE"
-INDUSTRY_RANKING = "INDUSTRY_RANKING"
-BASIC_INDUSTRY_IMPACT = "BASIC_INDUSTRY_IMPACT"
-BASIC_INDUSTRY_MACRO_SCORE = "BASIC_INDUSTRY_MACRO_SCORE"
-BASIC_INDUSTRY_RANKING = "BASIC_INDUSTRY_RANKING"
-STOCK_CANDIDATE_UNIVERSE = "STOCK_CANDIDATE_UNIVERSE"
-STOCK_CANDIDATE_SCORE = "STOCK_CANDIDATE_SCORE"
-STOCK_RANKING = "STOCK_RANKING"
+SECTOR_SELECTION = "SECTOR_SELECTION"
+INDUSTRY_SELECTION = "INDUSTRY_SELECTION"
+BASIC_INDUSTRY_SELECTION = "BASIC_INDUSTRY_SELECTION"
+STOCK_SELECTION = "STOCK_SELECTION"
 
 STAGE_ORDER: Tuple[str, ...] = (
     MACRO_SEARCH,
     MACRO_FILTER,
-    SECTOR_IMPACT,
-    SECTOR_MACRO_SCORE,
-    SECTOR_RANKING,
-    INDUSTRY_IMPACT,
-    INDUSTRY_MACRO_SCORE,
-    INDUSTRY_RANKING,
-    BASIC_INDUSTRY_IMPACT,
-    BASIC_INDUSTRY_MACRO_SCORE,
-    BASIC_INDUSTRY_RANKING,
-    STOCK_CANDIDATE_UNIVERSE,
-    STOCK_CANDIDATE_SCORE,
-    STOCK_RANKING,
+    SECTOR_SELECTION,
+    INDUSTRY_SELECTION,
+    BASIC_INDUSTRY_SELECTION,
+    STOCK_SELECTION,
 )
 
 HORIZON_STAGES = {
-    SECTOR_RANKING,
-    INDUSTRY_RANKING,
-    BASIC_INDUSTRY_RANKING,
-    STOCK_CANDIDATE_UNIVERSE,
-    STOCK_CANDIDATE_SCORE,
-    STOCK_RANKING,
+    SECTOR_SELECTION,
+    INDUSTRY_SELECTION,
+    BASIC_INDUSTRY_SELECTION,
+    STOCK_SELECTION,
 }
 
 METHOD_BY_STAGE = {
     MACRO_SEARCH: "fetch_macro_data",
     MACRO_FILTER: "generate_macro_filter_summary",
-    SECTOR_IMPACT: "generate_sector_impacts",
-    SECTOR_MACRO_SCORE: "calculate_sector_scores",
-    SECTOR_RANKING: "rank_and_select",
-    INDUSTRY_IMPACT: "generate_industry_impacts",
-    INDUSTRY_MACRO_SCORE: "calculate_industry_scores",
-    INDUSTRY_RANKING: "rank_and_select",
-    BASIC_INDUSTRY_IMPACT: "generate_basic_industry_impacts",
-    BASIC_INDUSTRY_MACRO_SCORE: "calculate_basic_industry_scores",
-    BASIC_INDUSTRY_RANKING: "rank_and_select",
-    STOCK_CANDIDATE_UNIVERSE: "build_candidates",
-    STOCK_CANDIDATE_SCORE: "score_candidates",
-    STOCK_RANKING: "rank_and_select",
+    SECTOR_SELECTION: "run",
+    INDUSTRY_SELECTION: "run",
+    BASIC_INDUSTRY_SELECTION: "run",
+    STOCK_SELECTION: "run",
 }
 
 SELECTION_BY_STAGE = {
-    SECTOR_RANKING: "SECTOR",
-    INDUSTRY_RANKING: "INDUSTRY",
-    BASIC_INDUSTRY_RANKING: "BASIC_INDUSTRY",
+    SECTOR_SELECTION: "SECTOR",
+    INDUSTRY_SELECTION: "INDUSTRY",
+    BASIC_INDUSTRY_SELECTION: "BASIC_INDUSTRY",
 }
 
 
@@ -138,6 +114,7 @@ class DiscoveryPipelineOrchestrator:
         run_id: str,
         resume: bool = True,
         force_restart: bool = False,
+        target_horizon: Optional[str] = None,
     ) -> Dict[str, Any]:
         locked = self._acquire_lock(run_id)
         if not locked:
@@ -187,7 +164,11 @@ class DiscoveryPipelineOrchestrator:
                 self._disc.commit()
                 return self._result(run)
 
-            active_horizons: Set[str] = set(self._horizons)
+            if target_horizon and target_horizon in self._horizons:
+                active_horizons: Set[str] = {target_horizon}
+            else:
+                active_horizons: Set[str] = set(self._horizons)
+                
             success_horizons: Set[str] = set()
 
             for stage in STAGE_ORDER:
@@ -206,7 +187,7 @@ class DiscoveryPipelineOrchestrator:
                         self._disc.commit()
                         return self._result(run)
                     active_horizons = self._next_active_horizons(run.id, stage, success_horizons)
-                    if stage != STOCK_RANKING and not active_horizons:
+                    if stage != STOCK_SELECTION and not active_horizons:
                         self._fail_run(
                             run,
                             E_STAGE_FAILED,
@@ -328,29 +309,21 @@ class DiscoveryPipelineOrchestrator:
                 .filter_by(run_id=run_id, horizon=horizon)
                 .count()
             )
+            scored_technical_count = (
+                self._disc.query(CompanyTechnicalMetric)
+                .filter(
+                    CompanyTechnicalMetric.run_id == run_id,
+                    CompanyTechnicalMetric.horizon == horizon,
+                    CompanyTechnicalMetric.final_technical_score.isnot(None),
+                )
+                .count()
+            )
             horizon_details["company_technical_metrics"] = technical_count
+            horizon_details["company_technical_scores"] = scored_technical_count
             if technical_count == 0:
                 missing.append(f"company_technical_metrics.{horizon}")
-
-            for entity_type in ("SECTOR", "INDUSTRY", "BASIC_INDUSTRY"):
-                rows = (
-                    self._disc.query(GroupScore)
-                    .filter_by(run_id=run_id, horizon=horizon, entity_type=entity_type)
-                )
-                count = rows.count()
-                scored_count = rows.filter(
-                    GroupScore.technical_score.isnot(None),
-                    GroupScore.fundamental_score.isnot(None),
-                ).count()
-                key = entity_type.lower()
-                horizon_details[key] = {
-                    "count": count,
-                    "technical_and_fundamental_scored_count": scored_count,
-                }
-                if count == 0:
-                    missing.append(f"{key}_group_scores.{horizon}")
-                if scored_count == 0:
-                    missing.append(f"{key}_technical_fundamental_scores.{horizon}")
+            if scored_technical_count == 0:
+                missing.append(f"company_technical_scores.{horizon}")
 
             details["horizons"][horizon] = horizon_details
 
@@ -359,20 +332,25 @@ class DiscoveryPipelineOrchestrator:
     def _run_single_stage(self, run: DiscoveryRun, stage: str) -> str:
         existing = (run.stage_results or {}).get(stage) or {}
         if existing.get("status") in STAGE_TERMINAL_SUCCESS:
+            logger.info(f"Run {run.id}: Stage {stage} is already completed. Skipping.")
             run.last_completed_stage = stage
             self._disc.commit()
             return existing["status"]
 
+        logger.info(f"Run {run.id}: Starting stage {stage}")
         self._set_stage_running(run, stage)
         try:
             output = self._call_service(stage, run.id)
             result = self._normalize_output(output)
             if result["status"] == STAGE_FAILED:
+                logger.error(f"Run {run.id}: Stage {stage} returned FAILED.")
                 self._set_stage_finished(run, stage, result, failed=True)
                 return STAGE_FAILED
+            logger.info(f"Run {run.id}: Stage {stage} COMPLETED successfully.")
             self._set_stage_finished(run, stage, result)
             return result["status"]
         except Exception as exc:
+            logger.exception(f"Run {run.id}: Exception occurred in stage {stage}")
             self._set_stage_exception(run, stage, exc)
             self._mark_downstream_skipped(run, stage)
             self._fail_run(run, E_STAGE_EXCEPTION, _safe_message(exc))
@@ -396,8 +374,11 @@ class DiscoveryPipelineOrchestrator:
         run.current_stage = stage
         self._disc.commit()
 
+        logger.info(f"Run {run.id}: Starting horizon stage {stage} for horizons {required_horizons}")
+
         success_horizons: Set[str] = set()
-        required_failures = 0
+        failed_horizons: Set[str] = set()
+        
         for horizon in self._horizons:
             existing = horizons.get(horizon) or {}
             if horizon not in required:
@@ -409,6 +390,7 @@ class DiscoveryPipelineOrchestrator:
                 continue
 
             if existing.get("status") in STAGE_TERMINAL_SUCCESS:
+                logger.info(f"Run {run.id}: Horizon {horizon} in stage {stage} is already completed. Skipping.")
                 success_horizons.add(horizon)
                 continue
 
@@ -421,17 +403,21 @@ class DiscoveryPipelineOrchestrator:
             }
             self._save_parent(run, stage, parent)
             try:
+                logger.info(f"Run {run.id}: Calling service for {stage} ({horizon})")
                 output = self._call_service(stage, run.id, horizon)
                 result = self._normalize_output(output)
                 horizons[horizon] = result
                 if result["status"] == STAGE_FAILED:
-                    required_failures += 1
+                    logger.error(f"Run {run.id}: Horizon {horizon} in stage {stage} returned FAILED.")
+                    failed_horizons.add(horizon)
                 else:
+                    logger.info(f"Run {run.id}: Horizon {horizon} in stage {stage} COMPLETED successfully.")
                     success_horizons.add(horizon)
                 self._save_parent(run, stage, parent)
             except Exception as exc:
+                logger.exception(f"Run {run.id}: Exception occurred in {stage} ({horizon})")
                 horizons[horizon] = self._exception_result(exc)
-                required_failures += 1
+                failed_horizons.add(horizon)
                 self._save_parent(run, stage, parent)
 
         parent_status = self._parent_horizon_status(horizons, required)
@@ -595,8 +581,6 @@ class DiscoveryPipelineOrchestrator:
             return factory()
 
     def _required_horizons(self, stage: str, active_horizons: Set[str]) -> Set[str]:
-        if stage == SECTOR_RANKING:
-            return set(self._horizons)
         return set(active_horizons)
 
     def _next_active_horizons(
@@ -744,7 +728,7 @@ class DiscoveryPipelineOrchestrator:
         self._aggregate_run_warnings(run)
         run.status = RUN_COMPLETED_WITH_WARNINGS if run.warnings else RUN_COMPLETED
         run.current_stage = None
-        run.last_completed_stage = STOCK_RANKING
+        run.last_completed_stage = STOCK_SELECTION
         run.completed_at = datetime.datetime.utcnow()
         run.error_code = None
         run.error_message = None

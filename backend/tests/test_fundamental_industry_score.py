@@ -7,7 +7,7 @@ from sqlalchemy import text
 
 from database import DiscoverySessionLocal
 from models.discovery import GroupScore
-from services.fundamental.fundamental_industry_score import FundamentalIndustryScoreService
+from services.fundamental.fundamental_group_score import FundamentalGroupScoreService
 
 @pytest.fixture
 def disc_session():
@@ -128,8 +128,8 @@ def test_fundamental_industry_score_service(disc_session):
     
     disc_session.commit()
     
-    svc = FundamentalIndustryScoreService(disc_session)
-    svc.calculate_industry_scores(run_id)
+    svc = FundamentalGroupScoreService(disc_session)
+    svc.calculate_final_scores(run_id, entity_type="INDUSTRY", parent_sector="SectorA")
     
     def get_f(name):
         g = disc_session.query(GroupScore).filter_by(entity_name=name).first()
@@ -203,6 +203,6 @@ def test_fundamental_industry_score_service(disc_session):
     assert "growth" in g.calculation_details["fundamental"]["pillar_scores"]
     
     # 19
-    svc.calculate_industry_scores(run_id)
+    svc.calculate_final_scores(run_id, entity_type="INDUSTRY", parent_sector="SectorA")
     f_all2, _, _ = get_f("IND_ALL")
     assert f_all2["score"] == 65.0

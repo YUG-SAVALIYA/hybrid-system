@@ -45,7 +45,7 @@ def _populate_benchmark(session, n=300):
         candles.append(
             BenchmarkCandle(
                 id=str(uuid.uuid4()),
-                benchmark_code="NIFTY_500",
+                benchmark_code="NIFTY500",
                 benchmark_name="Nifty 500",
                 trade_date=datetime.date.fromordinal(base_date.toordinal() + i),
                 open=100.0 + i,

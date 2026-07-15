@@ -30,6 +30,9 @@ class UniverseBuilder:
         self.source = source_session
         self.matcher = SymbolMatcher(suffixes or config.SYMBOL_SUFFIXES_TO_STRIP)
         self.cadence_auditor = CadenceAuditor(source_session)
+        self._cached_companies = None
+        self._cached_candle_counts = None
+        self._cached_financials = None
 
     # ------------------------------------------------------------------ #
     #  Public API                                                          #
@@ -45,15 +48,25 @@ class UniverseBuilder:
         horizon_days, min_candles = HORIZON_MAP[horizon]
         as_of = as_of_date or datetime.date.today()
 
-        companies = self._fetch_companies()
-        candle_counts = self._fetch_candle_counts()
-        fin_availability = self._fetch_financial_availability()
+        if self._cached_companies is None:
+            self._cached_companies = self._fetch_companies()
+        companies = self._cached_companies
+
+        if self._cached_candle_counts is None:
+            self._cached_candle_counts = self._fetch_candle_counts(as_of)
+        candle_counts = self._cached_candle_counts
+
+        if self._cached_financials is None:
+            self._cached_financials = self._fetch_financial_availability()
+        fin_availability = self._cached_financials
 
         results = []
         for company in companies:
             entry = self._evaluate_company(
                 company, horizon, horizon_days, min_candles, candle_counts, fin_availability
             )
+            if not (entry.get("return_available") and entry.get("financial_data_available")):
+                continue
             entry["as_of_date"] = as_of
             results.append(entry)
 
@@ -91,13 +104,15 @@ class UniverseBuilder:
             WHERE share_symbol IS NOT NULL AND share_symbol != ''
         """)).fetchall()
 
-    def _fetch_candle_counts(self) -> dict[str, int]:
+    def _fetch_candle_counts(self, as_of: datetime.date) -> dict[str, int]:
         """Returns {normalized_symbol: candle_count}"""
+        as_of_str = as_of.isoformat() + "T23:59:59"
         rows = self.source.execute(text("""
             SELECT symbol, COUNT(*) as cnt
             FROM market_candles_cleaned
+            WHERE datetime <= :as_of
             GROUP BY symbol
-        """)).fetchall()
+        """), {"as_of": as_of_str}).fetchall()
         return {r.symbol: r.cnt for r in rows}
 
     def _fetch_financial_availability(self) -> dict[str, dict]:
@@ -140,14 +155,21 @@ class UniverseBuilder:
             for r in rows:
                 by_overview.setdefault(r.company_id, []).append(r.period)
 
+            # Cache period parsing
+            parsed_cache = {}
+            def _parse(p):
+                if p not in parsed_cache:
+                    parsed_cache[p] = PeriodParser.parse(p)
+                return parsed_cache[p]
+
             for ov_id, periods in by_overview.items():
                 cid = overview_to_company.get(ov_id)
                 if not cid:
                     continue
 
                 parsed_valid = sorted(
-                    [p for p in periods if PeriodParser.parse(p)["parse_status"] == "VALID"],
-                    key=lambda p: PeriodParser.parse(p)["period_end"],
+                    [p for p in periods if _parse(p)["parse_status"] == "VALID"],
+                    key=lambda p: _parse(p)["period_end"],
                     reverse=True
                 )
                 entry = availability.setdefault(cid, {})

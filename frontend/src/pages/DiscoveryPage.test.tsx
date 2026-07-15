@@ -29,7 +29,8 @@ const preparePayload = {
     resume_count: 0,
     stage_results: {
       UNIVERSE_SNAPSHOT: { status: "COMPLETED", warnings: [] },
-      TECHNICAL_COMPANY: { status: "COMPLETED", warnings: [] },
+      COMPANY_TECHNICAL: { status: "COMPLETED", warnings: [] },
+      COMPANY_FUNDAMENTAL: { status: "COMPLETED", warnings: [] },
     },
     warnings: [],
     error: null,
@@ -41,11 +42,11 @@ const executePayload = {
   data: {
     run_id: "run-test",
     status: "COMPLETED",
-    last_completed_stage: "STOCK_RANKING",
+    last_completed_stage: "STOCK_SELECTION",
     resume_count: 0,
     horizons: {},
     stage_results: {
-      STOCK_RANKING: { status: "COMPLETED", warnings: [] },
+      STOCK_SELECTION: { status: "COMPLETED", warnings: [] },
     },
     warnings: [],
     error: null,
@@ -58,8 +59,8 @@ function resultPayload(status = "COMPLETED", overrides: Record<string, unknown> 
     data: {
       run_id: "run-test",
       status,
-      current_stage: status === "RUNNING" ? "STOCK_RANKING" : null,
-      last_completed_stage: status === "RUNNING" ? "BASIC_INDUSTRY_RANKING" : "STOCK_RANKING",
+      current_stage: status === "RUNNING" ? "STOCK_SELECTION" : null,
+      last_completed_stage: status === "RUNNING" ? "BASIC_INDUSTRY_SELECTION" : "STOCK_SELECTION",
       started_at: "2026-07-14T10:00:00Z",
       completed_at: status === "RUNNING" ? null : "2026-07-14T10:12:00Z",
       resume_count: 0,
@@ -67,7 +68,11 @@ function resultPayload(status = "COMPLETED", overrides: Record<string, unknown> 
       error: null,
       stage_results: {
         MACRO_SEARCH: { status: "COMPLETED", warnings: [] },
-        STOCK_RANKING: { status: status === "RUNNING" ? "RUNNING" : "COMPLETED", warnings: [] },
+        MACRO_FILTER: { status: "COMPLETED", warnings: [] },
+        SECTOR_SELECTION: { status: "COMPLETED", warnings: [], horizons: { SHORT: { status: "COMPLETED", warnings: [] } } },
+        INDUSTRY_SELECTION: { status: "COMPLETED", warnings: [], horizons: { SHORT: { status: "COMPLETED", warnings: [] } } },
+        BASIC_INDUSTRY_SELECTION: { status: "COMPLETED", warnings: [], horizons: { SHORT: { status: "COMPLETED", warnings: [] } } },
+        STOCK_SELECTION: { status: status === "RUNNING" ? "RUNNING" : "COMPLETED", warnings: [] },
       },
       horizons: {
         SHORT: {
@@ -111,6 +116,7 @@ function group(name: string, rank: number) {
   return {
     name,
     rank,
+    constituent_count: 42,
     final_score: 82,
     technical_score: 81,
     fundamental_score: 80,
@@ -193,6 +199,47 @@ describe("DiscoveryPage", () => {
     expect(screen.getByRole("tab", { name: "Short Term" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Mid Term" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Long Term" })).toBeInTheDocument();
+  });
+
+  it("renders simplified progress stages", async () => {
+    await runHappyFlow();
+    [
+      "UNIVERSE_SNAPSHOT",
+      "COMPANY_TECHNICAL",
+      "COMPANY_FUNDAMENTAL",
+      "MACRO_SEARCH",
+      "MACRO_FILTER",
+      "SECTOR_SELECTION",
+      "INDUSTRY_SELECTION",
+      "BASIC_INDUSTRY_SELECTION",
+      "STOCK_SELECTION",
+      "COMPLETED",
+    ].forEach((stage) => {
+      expect(screen.getAllByText(stage).length).toBeGreaterThan(0);
+    });
+  });
+
+  it("does not render removed global hierarchy stages", async () => {
+    await runHappyFlow();
+    [
+      "TECHNICAL_SECTOR",
+      "TECHNICAL_INDUSTRY",
+      "TECHNICAL_BASIC_INDUSTRY",
+      "FUNDAMENTAL_SECTOR",
+      "FUNDAMENTAL_INDUSTRY",
+      "FUNDAMENTAL_BASIC_INDUSTRY",
+      "SECTOR_IMPACT",
+      "SECTOR_MACRO_SCORE",
+      "INDUSTRY_IMPACT",
+      "INDUSTRY_MACRO_SCORE",
+      "BASIC_INDUSTRY_IMPACT",
+      "BASIC_INDUSTRY_MACRO_SCORE",
+      "STOCK_CANDIDATE_UNIVERSE",
+      "STOCK_CANDIDATE_SCORE",
+      "STOCK_RANKING",
+    ].forEach((stage) => {
+      expect(screen.queryByText(stage)).not.toBeInTheDocument();
+    });
   });
 
   it("calls create run API", async () => {
@@ -359,17 +406,183 @@ describe("DiscoveryPage", () => {
     expect(screen.getAllByText("Enterprise Software").length).toBeGreaterThan(0);
   });
 
+  it("renders different selected paths per horizon", async () => {
+    await runHappyFlow();
+    await userEvent.click(screen.getByRole("tab", { name: "Long Term" }));
+    expect(screen.getByText("Sector selection has not completed for this horizon.")).toBeInTheDocument();
+
+    cleanup();
+    mockFetchSequence([
+      {
+        body: resultPayload("COMPLETED", {
+          horizons: {
+            SHORT: {
+              status: "COMPLETED",
+              sector: group("Technology", 1),
+              industry: { ...group("Software", 1), parent_sector: "Technology" },
+              basic_industry: { ...group("Enterprise Software", 1), parent_sector: "Technology", parent_industry: "Software" },
+              stocks: [stock("AAA", 1, 84)],
+              warnings: [],
+            },
+            MID: {
+              status: "COMPLETED",
+              sector: group("Financials", 1),
+              industry: { ...group("Banks", 1), parent_sector: "Financials" },
+              basic_industry: { ...group("Private Banks", 1), parent_sector: "Financials", parent_industry: "Banks" },
+              stocks: [stock("FIN", 1, 76)],
+              warnings: [],
+            },
+            LONG: {
+              status: "COMPLETED",
+              sector: group("Industrials", 1),
+              industry: { ...group("Capital Goods", 1), parent_sector: "Industrials" },
+              basic_industry: { ...group("Electrical Equipment", 1), parent_sector: "Industrials", parent_industry: "Capital Goods" },
+              stocks: [stock("IND", 1, 71)],
+              warnings: [],
+            },
+          },
+        }),
+      },
+    ]);
+    render(<DiscoveryPage />);
+    await userEvent.click(screen.getByText("Advanced Options"));
+    await userEvent.type(screen.getByLabelText("Load Existing Run"), "run-test");
+    await userEvent.click(screen.getByRole("button", { name: "Load Result" }));
+    await screen.findAllByText("Technology");
+    await userEvent.click(screen.getByRole("tab", { name: "Mid Term" }));
+    expect(screen.getAllByText("Financials").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Banks").length).toBeGreaterThan(0);
+    await userEvent.click(screen.getByRole("tab", { name: "Long Term" }));
+    expect(screen.getAllByText("Industrials").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Capital Goods").length).toBeGreaterThan(0);
+  });
+
+  it("renders hierarchy mismatch warning instead of invalid industry", async () => {
+    mockFetchSequence([
+      {
+        body: resultPayload("COMPLETED", {
+          horizons: {
+            SHORT: {
+              status: "COMPLETED",
+              sector: group("Technology", 1),
+              industry: { ...group("Banks", 1), parent_sector: "Financials" },
+              basic_industry: null,
+              stocks: [],
+              warnings: ["SELECTION_HIERARCHY_MISMATCH"],
+            },
+            MID: { status: "PENDING", sector: null, industry: null, basic_industry: null, stocks: [], warnings: [] },
+            LONG: { status: "PENDING", sector: null, industry: null, basic_industry: null, stocks: [], warnings: [] },
+          },
+        }),
+      },
+    ]);
+    render(<DiscoveryPage />);
+    await userEvent.click(screen.getByText("Advanced Options"));
+    await userEvent.type(screen.getByLabelText("Load Existing Run"), "run-test");
+    await userEvent.click(screen.getByRole("button", { name: "Load Result" }));
+    expect(await screen.findByText("No eligible Industry was found inside the selected Sector.")).toBeInTheDocument();
+    expect(screen.getAllByText("SELECTION_HIERARCHY_MISMATCH").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("heading", { name: "Industry" })).not.toBeInTheDocument();
+  });
+
   it("displays stocks in persisted rank order", async () => {
     await runHappyFlow();
     const rows = within(screen.getByRole("table", { name: "Selected Stocks" })).getAllByRole("row");
-    expect(rows[1]).toHaveTextContent("1AAA");
-    expect(rows[2]).toHaveTextContent("2BBB");
+    expect(rows[1]).toHaveTextContent("2BBB");
+    expect(rows[2]).toHaveTextContent("1AAA");
+  });
+
+  it("renders persisted stock technical and inherited macro scores", async () => {
+    await runHappyFlow();
+    const table = screen.getByRole("table", { name: "Selected Stocks" });
+    expect(within(table).getByText("Technical Score")).toBeInTheDocument();
+    expect(within(table).getByText("Inherited Basic Industry Macro Score")).toBeInTheDocument();
+    expect(within(table).getAllByText("79.0").length).toBeGreaterThan(0);
   });
 
   it("renders empty horizon state", async () => {
     await runHappyFlow();
     await userEvent.click(screen.getByRole("tab", { name: "Mid Term" }));
-    expect(screen.getByText("This horizon has not been processed yet.")).toBeInTheDocument();
+    expect(screen.getByText("Sector selection has not completed for this horizon.")).toBeInTheDocument();
+  });
+
+  it("renders empty sector, industry, basic industry, and stock states", async () => {
+    const baseHorizons = {
+      MID: { status: "PENDING", sector: null, industry: null, basic_industry: null, stocks: [], warnings: [] },
+      LONG: { status: "PENDING", sector: null, industry: null, basic_industry: null, stocks: [], warnings: [] },
+    };
+    const cases = [
+      {
+        horizon: { status: "COMPLETED", sector: null, industry: null, basic_industry: null, stocks: [], warnings: [] },
+        message: "No eligible Sector was found.",
+      },
+      {
+        horizon: { status: "COMPLETED", sector: group("Technology", 1), industry: null, basic_industry: null, stocks: [], warnings: [] },
+        message: "No eligible Industry was found inside the selected Sector.",
+      },
+      {
+        horizon: {
+          status: "COMPLETED",
+          sector: group("Technology", 1),
+          industry: { ...group("Software", 1), parent_sector: "Technology" },
+          basic_industry: null,
+          stocks: [],
+          warnings: [],
+        },
+        message: "No eligible Basic Industry was found inside the selected Industry.",
+      },
+      {
+        horizon: {
+          status: "COMPLETED",
+          sector: group("Technology", 1),
+          industry: { ...group("Software", 1), parent_sector: "Technology" },
+          basic_industry: { ...group("Enterprise Software", 1), parent_sector: "Technology", parent_industry: "Software" },
+          stocks: [],
+          warnings: [],
+        },
+        message: "No eligible stocks were found inside the selected Basic Industry.",
+      },
+    ];
+
+    for (const item of cases) {
+      cleanup();
+      mockFetchSequence([{ body: resultPayload("COMPLETED", { horizons: { SHORT: item.horizon, ...baseHorizons } }) }]);
+      render(<DiscoveryPage />);
+      await userEvent.click(screen.getByText("Advanced Options"));
+      await userEvent.type(screen.getByLabelText("Load Existing Run"), "run-test");
+      await userEvent.click(screen.getByRole("button", { name: "Load Result" }));
+      expect(await screen.findByText(item.message)).toBeInTheDocument();
+    }
+  });
+
+  it("keeps successful horizons visible when another horizon failed", async () => {
+    mockFetchSequence([
+      {
+        body: resultPayload("COMPLETED_WITH_WARNINGS", {
+          horizons: {
+            SHORT: resultPayload().data.horizons.SHORT,
+            MID: { status: "FAILED", sector: null, industry: null, basic_industry: null, stocks: [], warnings: ["MID_FAILED"] },
+            LONG: {
+              status: "COMPLETED",
+              sector: group("Industrials", 1),
+              industry: { ...group("Capital Goods", 1), parent_sector: "Industrials" },
+              basic_industry: { ...group("Electrical Equipment", 1), parent_sector: "Industrials", parent_industry: "Capital Goods" },
+              stocks: [stock("IND", 1, 71)],
+              warnings: [],
+            },
+          },
+        }),
+      },
+    ]);
+    render(<DiscoveryPage />);
+    await userEvent.click(screen.getByText("Advanced Options"));
+    await userEvent.type(screen.getByLabelText("Load Existing Run"), "run-test");
+    await userEvent.click(screen.getByRole("button", { name: "Load Result" }));
+    expect((await screen.findAllByText("Technology")).length).toBeGreaterThan(0);
+    await userEvent.click(screen.getByRole("tab", { name: "Mid Term" }));
+    expect(screen.getByText("No eligible Sector was found.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("tab", { name: "Long Term" }));
+    expect(screen.getAllByText("Industrials").length).toBeGreaterThan(0);
   });
 
   it("renders warnings", async () => {

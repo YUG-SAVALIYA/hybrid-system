@@ -71,27 +71,42 @@ class FundamentalPeriodSelectionService:
         self._src = source_session
 
     def select_periods(self) -> list[dict]:
-        query = text("""
+        query_companies = text("""
             SELECT 
                 c.id as source_company_id,
                 c.share_symbol as symbol,
-                co.id as overview_id,
-                (SELECT array_agg(DISTINCT period) FROM company_profit_losses pl WHERE pl.company_id = co.id) as pl_periods,
-                (SELECT array_agg(DISTINCT period) FROM company_balance_sheets bs WHERE bs.company_id = co.id) as bs_periods,
-                (SELECT array_agg(DISTINCT period) FROM company_cash_flows cf WHERE cf.company_id = co.id) as cf_periods
+                co.id as overview_id
             FROM companies c
             LEFT JOIN company_overviews co ON c.share_symbol = co.share_symbol
         """)
-        
-        records = self._src.execute(query).fetchall()
-        
+        companies = self._src.execute(query_companies).fetchall()
+        overview_ids = [c.overview_id for c in companies if c.overview_id]
+
+        pl_periods_map = {}
+        bs_periods_map = {}
+        cf_periods_map = {}
+
+        if overview_ids:
+            pl_query = text("SELECT company_id, array_agg(DISTINCT period) as periods FROM company_profit_losses WHERE company_id = ANY(:cids) GROUP BY company_id")
+            for r in self._src.execute(pl_query, {"cids": overview_ids}).fetchall():
+                pl_periods_map[r.company_id] = r.periods
+
+            bs_query = text("SELECT company_id, array_agg(DISTINCT period) as periods FROM company_balance_sheets WHERE company_id = ANY(:cids) GROUP BY company_id")
+            for r in self._src.execute(bs_query, {"cids": overview_ids}).fetchall():
+                bs_periods_map[r.company_id] = r.periods
+
+            cf_query = text("SELECT company_id, array_agg(DISTINCT period) as periods FROM company_cash_flows WHERE company_id = ANY(:cids) GROUP BY company_id")
+            for r in self._src.execute(cf_query, {"cids": overview_ids}).fetchall():
+                cf_periods_map[r.company_id] = r.periods
+
         results = []
-        for r in records:
+        for r in companies:
             warnings = set()
+            oid = r.overview_id
             
-            pl_strings = r.pl_periods or []
-            bs_strings = r.bs_periods or []
-            cf_strings = r.cf_periods or []
+            pl_strings = pl_periods_map.get(oid, []) if oid else []
+            bs_strings = bs_periods_map.get(oid, []) if oid else []
+            cf_strings = cf_periods_map.get(oid, []) if oid else []
             
             if not r.overview_id:
                 warnings.add("MISSING_COMPANY_OVERVIEW")

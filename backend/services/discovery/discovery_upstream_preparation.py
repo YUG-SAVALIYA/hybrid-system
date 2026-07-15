@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import datetime
+import logging
 import re
 import uuid
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Set, Tuple
@@ -15,22 +16,8 @@ from models.discovery import (
     CompanyTechnicalMetric,
     DiscoveryRun,
     EligibleUniverseSnapshot,
-    GroupScore,
 )
 from services.fundamental.company_fundamental_score import CompanyFundamentalScoreService
-from services.fundamental.fundamental_basic_industry_aggregation import (
-    FundamentalBasicIndustryAggregationService,
-)
-from services.fundamental.fundamental_basic_industry_metric_normalization import (
-    FundamentalBasicIndustryMetricNormalizationService,
-)
-from services.fundamental.fundamental_basic_industry_pillar_score import (
-    FundamentalBasicIndustryPillarScoreService,
-)
-from services.fundamental.fundamental_basic_industry_score import FundamentalBasicIndustryScoreService
-from services.fundamental.fundamental_basic_industry_transition_score import (
-    FundamentalBasicIndustryTransitionScoreService,
-)
 from services.fundamental.fundamental_cash_conversion import FundamentalCashConversionService
 from services.fundamental.fundamental_earnings_quality_score import FundamentalEarningsQualityScoreService
 from services.fundamental.fundamental_financial_strength import FundamentalFinancialStrengthService
@@ -39,41 +26,20 @@ from services.fundamental.fundamental_financial_strength_score import (
 )
 from services.fundamental.fundamental_growth import FundamentalGrowthService
 from services.fundamental.fundamental_growth_score import FundamentalGrowthScoreService
-from services.fundamental.fundamental_industry_aggregation import FundamentalIndustryAggregationService
-from services.fundamental.fundamental_industry_metric_normalization import (
-    FundamentalIndustryMetricNormalizationService,
-)
-from services.fundamental.fundamental_industry_pillar_score import FundamentalIndustryPillarScoreService
-from services.fundamental.fundamental_industry_score import FundamentalIndustryScoreService
-from services.fundamental.fundamental_industry_transition_score import (
-    FundamentalIndustryTransitionScoreService,
-)
 from services.fundamental.fundamental_peer_median import FundamentalPeerMedianService
 from services.fundamental.fundamental_period_selection import FundamentalPeriodSelectionService
 from services.fundamental.fundamental_profit_stability import FundamentalProfitStabilityService
 from services.fundamental.fundamental_profitability import FundamentalProfitabilityService
 from services.fundamental.fundamental_profitability_score import FundamentalProfitabilityScoreService
-from services.fundamental.fundamental_sector_aggregation import FundamentalSectorAggregationService
-from services.fundamental.fundamental_sector_metric_normalization import (
-    FundamentalSectorMetricNormalizationService,
-)
-from services.fundamental.fundamental_sector_pillar_score import FundamentalSectorPillarScoreService
-from services.fundamental.fundamental_sector_score import FundamentalSectorScoreService
-from services.fundamental.fundamental_sector_transition_score import FundamentalSectorTransitionScoreService
-from services.technical.technical_basic_industry_aggregation import (
-    TechnicalBasicIndustryAggregationService,
-)
-from services.technical.technical_basic_industry_score import TechnicalBasicIndustryScoreService
+from services.technical.company_technical_score import CompanyTechnicalScoreService
 from services.technical.technical_consistency import TechnicalConsistencyService
 from services.technical.technical_date_alignment import TechnicalDateAlignmentService
-from services.technical.technical_industry_aggregation import TechnicalIndustryAggregationService
-from services.technical.technical_industry_score import TechnicalIndustryScoreService
 from services.technical.technical_return import TechnicalReturnService
-from services.technical.technical_sector_aggregation import TechnicalSectorAggregationService
-from services.technical.technical_sector_score import TechnicalSectorScoreService
 from services.technical.technical_volume import TechnicalVolumeService
 from services.universe.universe_builder import UniverseBuilder
 
+
+logger = logging.getLogger(__name__)
 
 HORIZONS: Tuple[str, str, str] = ("SHORT", "MID", "LONG")
 
@@ -97,35 +63,25 @@ E_SERVICE_UNAVAILABLE = "DISCOVERY_PREPARATION_SERVICE_UNAVAILABLE"
 E_STAGE_FAILED = "DISCOVERY_PREPARATION_STAGE_FAILED"
 E_VALIDATION_FAILED = "DISCOVERY_UPSTREAM_VALIDATION_FAILED"
 E_STAGE_EXCEPTION = "DISCOVERY_PREPARATION_STAGE_EXCEPTION"
+BENCHMARK_DATA_UNAVAILABLE = "BENCHMARK_DATA_UNAVAILABLE"
+BENCHMARK_DATA_UNAVAILABLE_MESSAGE = (
+    "NIFTY500 benchmark data is unavailable. Import genuine NIFTY500 "
+    "benchmark candles before running discovery."
+)
 
 UNIVERSE_SNAPSHOT = "UNIVERSE_SNAPSHOT"
-TECHNICAL_COMPANY = "TECHNICAL_COMPANY"
-TECHNICAL_SECTOR = "TECHNICAL_SECTOR"
-TECHNICAL_INDUSTRY = "TECHNICAL_INDUSTRY"
-TECHNICAL_BASIC_INDUSTRY = "TECHNICAL_BASIC_INDUSTRY"
-FUNDAMENTAL_COMPANY = "FUNDAMENTAL_COMPANY"
-FUNDAMENTAL_SECTOR = "FUNDAMENTAL_SECTOR"
-FUNDAMENTAL_INDUSTRY = "FUNDAMENTAL_INDUSTRY"
-FUNDAMENTAL_BASIC_INDUSTRY = "FUNDAMENTAL_BASIC_INDUSTRY"
+COMPANY_TECHNICAL = "COMPANY_TECHNICAL"
+COMPANY_FUNDAMENTAL = "COMPANY_FUNDAMENTAL"
 UPSTREAM_VALIDATION = "UPSTREAM_VALIDATION"
 
 STAGE_ORDER: Tuple[str, ...] = (
     UNIVERSE_SNAPSHOT,
-    TECHNICAL_COMPANY,
-    TECHNICAL_SECTOR,
-    TECHNICAL_INDUSTRY,
-    TECHNICAL_BASIC_INDUSTRY,
-    FUNDAMENTAL_COMPANY,
-    FUNDAMENTAL_SECTOR,
-    FUNDAMENTAL_INDUSTRY,
-    FUNDAMENTAL_BASIC_INDUSTRY,
+    COMPANY_TECHNICAL,
+    COMPANY_FUNDAMENTAL,
     UPSTREAM_VALIDATION,
 )
 TECHNICAL_HORIZON_STAGES = {
-    TECHNICAL_COMPANY,
-    TECHNICAL_SECTOR,
-    TECHNICAL_INDUSTRY,
-    TECHNICAL_BASIC_INDUSTRY,
+    COMPANY_TECHNICAL,
 }
 
 
@@ -157,20 +113,31 @@ class DiscoveryUpstreamPreparationService:
         resume: bool = True,
         force_restart: bool = False,
     ) -> Dict[str, Any]:
+        logger.info("PREP | action=START | resume=%s | force_restart=%s", resume, force_restart)
         locked = self._acquire_lock(run_id)
         if not locked:
+            logger.warning("PREP | action=BLOCKED | code=%s", E_ALREADY_RUNNING)
             return self._missing_result(run_id, E_ALREADY_RUNNING, "Discovery preparation is already running.")
 
         try:
             run = self._get_run(run_id)
             if run is None:
+                logger.warning(
+                    "PREP | action=FAIL | code=%s | message=\"Discovery run not found.\"",
+                    E_RUN_NOT_FOUND,
+                )
                 return self._missing_result(run_id, E_RUN_NOT_FOUND, "Discovery run not found.")
 
             if self._macro_pipeline_running(run):
+                logger.warning("PREP | action=BLOCKED | code=%s", E_ALREADY_RUNNING)
                 return self._fail_validation(run, E_ALREADY_RUNNING, "Discovery run is already processing.")
 
             as_of_date = self._as_of_date(run)
             if as_of_date is None:
+                logger.warning(
+                    "PREP | action=FAIL | code=%s | message=\"Discovery run source data date is unavailable.\"",
+                    E_AS_OF_UNAVAILABLE,
+                )
                 return self._fail_validation(
                     run,
                     E_AS_OF_UNAVAILABLE,
@@ -187,18 +154,11 @@ class DiscoveryUpstreamPreparationService:
 
             active_horizons: Set[str] = set(self._horizons)
             for stage in STAGE_ORDER:
+                logger.info("PREP | stage=%s | status=START", stage)
                 if stage == UNIVERSE_SNAPSHOT:
                     status = self._run_universe_stage(run, as_of_date)
-                elif stage == TECHNICAL_COMPANY:
+                elif stage == COMPANY_TECHNICAL:
                     status, active_horizons = self._run_technical_company_stage(run)
-                elif stage in {
-                    TECHNICAL_SECTOR,
-                    TECHNICAL_INDUSTRY,
-                    TECHNICAL_BASIC_INDUSTRY,
-                }:
-                    status, active_horizons = self._run_technical_hierarchy_stage(
-                        run, stage, active_horizons
-                    )
                 elif stage == UPSTREAM_VALIDATION:
                     status = self._run_validation_stage(run)
                 else:
@@ -206,17 +166,27 @@ class DiscoveryUpstreamPreparationService:
 
                 if status == STAGE_FAILED:
                     stage_error = (run.preparation_stage_results or {}).get(stage) or {}
+                    code, message, horizons = _stage_failure_details(stage_error)
+                    logger.warning(
+                        "PREP | stage=%s | status=FAIL | code=%s | horizons=%s | message=\"%s\"",
+                        stage,
+                        code,
+                        horizons,
+                        message,
+                    )
                     self._fail_preparation(
                         run,
-                        stage_error.get("error_code") or E_STAGE_FAILED,
-                        stage_error.get("error_message") or f"{stage} failed.",
+                        code,
+                        message,
                     )
                     self._mark_downstream_skipped(run, stage)
                     self._disc.commit()
                     return self._result(run)
+                logger.info("PREP | stage=%s | status=%s", stage, status)
 
             self._complete_preparation(run)
             self._disc.commit()
+            logger.info("PREP | status=DONE | result=%s", run.preparation_status)
             return self._result(run)
         finally:
             self._release_lock(run_id)
@@ -302,28 +272,20 @@ class DiscoveryUpstreamPreparationService:
             )
             return STAGE_COMPLETED
         except Exception as exc:
+            logger.error(
+                "PREP | stage=%s | status=EXCEPTION | message=\"%s\"",
+                UNIVERSE_SNAPSHOT,
+                _safe_message(exc),
+            )
             self._set_stage_exception(run, UNIVERSE_SNAPSHOT, exc)
             return STAGE_FAILED
 
     def _run_technical_company_stage(self, run: DiscoveryRun) -> Tuple[str, Set[str]]:
         return self._run_horizon_stage(
             run,
-            TECHNICAL_COMPANY,
+            COMPANY_TECHNICAL,
             set(self._horizons),
             lambda horizon: self._execute_technical_company_horizon(run.id, horizon),
-        )
-
-    def _run_technical_hierarchy_stage(
-        self,
-        run: DiscoveryRun,
-        stage: str,
-        required_horizons: Set[str],
-    ) -> Tuple[str, Set[str]]:
-        return self._run_horizon_stage(
-            run,
-            stage,
-            required_horizons,
-            lambda horizon: self._execute_technical_hierarchy_horizon(stage, horizon, run.id),
         )
 
     def _run_horizon_stage(
@@ -371,6 +333,13 @@ class DiscoveryUpstreamPreparationService:
                 result = self._normalize_output(executor(horizon))
             except Exception as exc:
                 result = self._exception_result(exc)
+                logger.error(
+                    "PREP | stage=%s | horizon=%s | status=EXCEPTION | code=%s | message=\"%s\"",
+                    stage,
+                    horizon,
+                    result.get("error_code") or E_STAGE_EXCEPTION,
+                    _safe_message(result.get("error_message") or exc),
+                )
             horizons[horizon] = result
             if result["status"] in STAGE_TERMINAL_SUCCESS:
                 success_horizons.add(horizon)
@@ -395,8 +364,9 @@ class DiscoveryUpstreamPreparationService:
             ),
         }
         if parent_status == STAGE_FAILED:
-            parent["error_code"] = E_STAGE_FAILED
-            parent["error_message"] = f"{stage} failed for every required horizon."
+            code, message, _ = _horizon_failure_details(stage, horizons, required_horizons)
+            parent["error_code"] = code
+            parent["error_message"] = message
         self._save_horizon_parent(run, stage, parent)
         if parent_status in STAGE_TERMINAL_SUCCESS:
             run.preparation_last_completed_stage = stage
@@ -415,41 +385,14 @@ class DiscoveryUpstreamPreparationService:
             return {
                 "status": STAGE_FAILED,
                 "error_code": code,
-                "error_message": code,
+                "error_message": _error_message_for_code(code),
                 "warnings": [code],
             }
 
         self._service("TECHNICAL_RETURN").calculate_and_save_returns(run_id, alignment)
         self._service("TECHNICAL_VOLUME").calculate_and_save_volumes(run_id, horizon)
         self._service("TECHNICAL_CONSISTENCY").calculate_and_save_consistency(run_id, horizon)
-        finalizer = self._services.get("COMPANY_TECHNICAL_SCORE") or self._services.get(
-            "TECHNICAL_COMPANY_SCORE"
-        )
-        if finalizer is not None:
-            self._call_optional_company_technical_finalizer(finalizer, run_id, horizon)
-        return {"status": STAGE_COMPLETED, "metadata": {"horizon": horizon}}
-
-    def _execute_technical_hierarchy_horizon(
-        self,
-        stage: str,
-        horizon: str,
-        run_id: str,
-    ) -> Dict[str, Any]:
-        if stage == TECHNICAL_SECTOR:
-            self._service("TECHNICAL_SECTOR_AGGREGATION").aggregate_sectors(run_id, horizon)
-            self._service("TECHNICAL_SECTOR_SCORE").calculate_sector_scores(run_id, horizon)
-        elif stage == TECHNICAL_INDUSTRY:
-            self._service("TECHNICAL_INDUSTRY_AGGREGATION").aggregate_industries(run_id, horizon)
-            self._service("TECHNICAL_INDUSTRY_SCORE").calculate_industry_scores(run_id, horizon)
-        elif stage == TECHNICAL_BASIC_INDUSTRY:
-            self._service("TECHNICAL_BASIC_INDUSTRY_AGGREGATION").aggregate_basic_industries(
-                run_id, horizon
-            )
-            self._service("TECHNICAL_BASIC_INDUSTRY_SCORE").calculate_basic_industry_scores(
-                run_id, horizon
-            )
-        else:
-            raise DiscoveryPreparationError(E_STAGE_FAILED, f"Unknown technical stage {stage}.")
+        self._service("COMPANY_TECHNICAL_SCORE").score_companies(run_id, horizon)
         return {"status": STAGE_COMPLETED, "metadata": {"horizon": horizon}}
 
     def _run_single_stage(self, run: DiscoveryRun, stage: str) -> str:
@@ -466,11 +409,12 @@ class DiscoveryUpstreamPreparationService:
             self._set_stage_finished(run, stage, result, failed=result["status"] == STAGE_FAILED)
             return result["status"]
         except Exception as exc:
+            logger.error("PREP | stage=%s | status=EXCEPTION | message=\"%s\"", stage, _safe_message(exc))
             self._set_stage_exception(run, stage, exc)
             return STAGE_FAILED
 
     def _execute_single_stage(self, stage: str, run_id: str) -> Dict[str, Any]:
-        if stage == FUNDAMENTAL_COMPANY:
+        if stage == COMPANY_FUNDAMENTAL:
             self._service("FUNDAMENTAL_PERIOD_SELECTION").select_periods()
             self._service("FUNDAMENTAL_GROWTH").calculate_growth(run_id)
             self._service("FUNDAMENTAL_PROFITABILITY").calculate_profitability(run_id)
@@ -483,34 +427,6 @@ class DiscoveryUpstreamPreparationService:
             self._service("FUNDAMENTAL_FINANCIAL_STRENGTH_SCORE").score_financial_strength(run_id)
             self._service("FUNDAMENTAL_EARNINGS_QUALITY_SCORE").score_earnings_quality(run_id)
             self._service("COMPANY_FUNDAMENTAL_SCORE").score_companies(run_id)
-        elif stage == FUNDAMENTAL_SECTOR:
-            self._service("FUNDAMENTAL_SECTOR_AGGREGATION").aggregate_sectors(run_id)
-            self._service("FUNDAMENTAL_SECTOR_METRIC_NORMALIZATION").normalize_metrics(run_id)
-            self._service("FUNDAMENTAL_SECTOR_TRANSITION_SCORE").calculate_transition_scores(run_id)
-            self._service("FUNDAMENTAL_SECTOR_PILLAR_SCORE").calculate_pillar_scores(run_id)
-            self._service("FUNDAMENTAL_SECTOR_SCORE").calculate_final_scores(run_id)
-        elif stage == FUNDAMENTAL_INDUSTRY:
-            self._service("FUNDAMENTAL_INDUSTRY_AGGREGATION").aggregate_industries(run_id)
-            self._service("FUNDAMENTAL_INDUSTRY_METRIC_NORMALIZATION").normalize_industry_metrics(
-                run_id
-            )
-            self._service("FUNDAMENTAL_INDUSTRY_TRANSITION_SCORE").calculate_transition_scores(
-                run_id
-            )
-            self._service("FUNDAMENTAL_INDUSTRY_PILLAR_SCORE").calculate_pillar_scores(run_id)
-            self._service("FUNDAMENTAL_INDUSTRY_SCORE").calculate_industry_scores(run_id)
-        elif stage == FUNDAMENTAL_BASIC_INDUSTRY:
-            self._service("FUNDAMENTAL_BASIC_INDUSTRY_AGGREGATION").aggregate_basic_industries(
-                run_id
-            )
-            self._service(
-                "FUNDAMENTAL_BASIC_INDUSTRY_METRIC_NORMALIZATION"
-            ).normalize_basic_industry_metrics(run_id)
-            self._service(
-                "FUNDAMENTAL_BASIC_INDUSTRY_TRANSITION_SCORE"
-            ).calculate_basic_industry_transitions(run_id)
-            self._service("FUNDAMENTAL_BASIC_INDUSTRY_PILLAR_SCORE").calculate_pillar_scores(run_id)
-            self._service("FUNDAMENTAL_BASIC_INDUSTRY_SCORE").calculate_basic_industry_scores(run_id)
         else:
             raise DiscoveryPreparationError(E_STAGE_FAILED, f"Unknown preparation stage {stage}.")
         return {"status": STAGE_COMPLETED, "metadata": {"stage": stage}}
@@ -554,6 +470,13 @@ class DiscoveryUpstreamPreparationService:
     def _validation_counts(self, run_id: str, horizons: Set[str]) -> Dict[str, Any]:
         missing: List[str] = []
         details: Dict[str, Any] = {"horizons": {}, "missing": missing}
+        universe_count = self._disc.query(EligibleUniverseSnapshot).filter_by(
+            run_id=run_id
+        ).count()
+        details["eligible_universe_snapshots"] = {"count": universe_count}
+        if universe_count == 0:
+            missing.append("eligible_universe_snapshots")
+
         company_fundamental_count = self._disc.query(CompanyFundamentalMetric).filter_by(
             run_id=run_id
         ).count()
@@ -585,42 +508,25 @@ class DiscoveryUpstreamPreparationService:
             if technical_count == 0:
                 missing.append(f"company_technical_metrics.{horizon}")
 
-            for entity_type in ("SECTOR", "INDUSTRY", "BASIC_INDUSTRY"):
-                technical_group_count = (
-                    self._disc.query(GroupScore)
-                    .filter(
-                        GroupScore.run_id == run_id,
-                        GroupScore.horizon == horizon,
-                        GroupScore.entity_type == entity_type,
-                        GroupScore.technical_score.isnot(None),
-                    )
-                    .count()
+            technical_final_score_count = (
+                self._disc.query(CompanyTechnicalMetric)
+                .filter(
+                    CompanyTechnicalMetric.run_id == run_id,
+                    CompanyTechnicalMetric.horizon == horizon,
+                    CompanyTechnicalMetric.final_technical_score.isnot(None),
                 )
-                fundamental_group_count = (
-                    self._disc.query(GroupScore)
-                    .filter(
-                        GroupScore.run_id == run_id,
-                        GroupScore.entity_type == entity_type,
-                        GroupScore.fundamental_score.isnot(None),
-                    )
-                    .count()
-                )
-                key = entity_type.lower()
-                horizon_details[key] = {
-                    "technical_score_count": technical_group_count,
-                    "fundamental_score_count": fundamental_group_count,
-                }
-                if technical_group_count == 0:
-                    missing.append(f"{key}_technical_scores.{horizon}")
-                if fundamental_group_count == 0:
-                    missing.append(f"{key}_fundamental_scores")
+                .count()
+            )
+            horizon_details["company_technical_final_scores"] = technical_final_score_count
+            if technical_final_score_count == 0:
+                missing.append(f"company_technical_final_scores.{horizon}")
             details["horizons"][horizon] = horizon_details
 
         details["missing"] = sorted(set(missing))
         return details
 
     def _successful_technical_horizons(self, run: DiscoveryRun) -> Set[str]:
-        parent = (run.preparation_stage_results or {}).get(TECHNICAL_COMPANY) or {}
+        parent = (run.preparation_stage_results or {}).get(COMPANY_TECHNICAL) or {}
         horizons = parent.get("horizons") or {}
         return {
             horizon
@@ -635,47 +541,50 @@ class DiscoveryUpstreamPreparationService:
         as_of_date: datetime.date,
         entries: Iterable[Dict[str, Any]],
     ) -> int:
-        count = 0
+        from sqlalchemy import text
+        # Bulk delete existing to handle resumes safely
+        self._disc.execute(
+            text("DELETE FROM eligible_universe_snapshots WHERE run_id = :r AND horizon = :h"),
+            {"r": run_id, "h": horizon},
+        )
+        
+        insert_data = []
         for entry in entries:
             source_company_id = str(entry.get("source_company_id") or entry.get("company_id") or "")
             if not source_company_id:
                 continue
-            row = (
-                self._disc.query(EligibleUniverseSnapshot)
-                .filter_by(
-                    run_id=run_id,
-                    horizon=horizon,
-                    source_company_id=source_company_id,
-                )
-                .first()
+                
+            insert_data.append({
+                "id": str(uuid.uuid4()),
+                "run_id": run_id,
+                "horizon": horizon,
+                "source_company_id": source_company_id,
+                "as_of_date": entry.get("as_of_date") or as_of_date,
+                "symbol": entry.get("symbol") or "",
+                "sector": entry.get("sector") or "",
+                "industry": entry.get("industry") or "",
+                "basic_industry": entry.get("basic_industry"),
+                "market_cap": entry.get("market_cap"),
+                "return_available": bool(entry.get("return_available")),
+                "volume_available": bool(entry.get("volume_available")),
+                "consistency_available": bool(entry.get("consistency_available")),
+                "financial_data_available": bool(entry.get("financial_data_available")),
+                "technical_data_coverage": float(entry.get("technical_data_coverage") or 0.0),
+                "fundamental_data_coverage": float(entry.get("fundamental_data_coverage") or 0.0),
+                "eligible_for_sector": bool(entry.get("eligible_for_sector")),
+                "eligible_for_industry": bool(entry.get("eligible_for_industry")),
+                "eligible_for_basic_industry": bool(entry.get("eligible_for_basic_industry")),
+                "exclusion_reasons": list(entry.get("exclusion_reasons") or [])
+            })
+            
+        if insert_data:
+            self._disc.execute(
+                EligibleUniverseSnapshot.__table__.insert(),
+                insert_data
             )
-            if row is None:
-                row = EligibleUniverseSnapshot(
-                    id=str(uuid.uuid4()),
-                    run_id=run_id,
-                    horizon=horizon,
-                    source_company_id=source_company_id,
-                )
-                self._disc.add(row)
-            row.as_of_date = entry.get("as_of_date") or as_of_date
-            row.symbol = entry.get("symbol") or ""
-            row.sector = entry.get("sector") or ""
-            row.industry = entry.get("industry") or ""
-            row.basic_industry = entry.get("basic_industry")
-            row.market_cap = entry.get("market_cap")
-            row.return_available = bool(entry.get("return_available"))
-            row.volume_available = bool(entry.get("volume_available"))
-            row.consistency_available = bool(entry.get("consistency_available"))
-            row.financial_data_available = bool(entry.get("financial_data_available"))
-            row.technical_data_coverage = float(entry.get("technical_data_coverage") or 0.0)
-            row.fundamental_data_coverage = float(entry.get("fundamental_data_coverage") or 0.0)
-            row.eligible_for_sector = bool(entry.get("eligible_for_sector"))
-            row.eligible_for_industry = bool(entry.get("eligible_for_industry"))
-            row.eligible_for_basic_industry = bool(entry.get("eligible_for_basic_industry"))
-            row.exclusion_reasons = list(entry.get("exclusion_reasons") or [])
-            count += 1
+            
         self._disc.commit()
-        return count
+        return len(insert_data)
 
     def _set_stage_running(self, run: DiscoveryRun, stage: str) -> None:
         results = dict(run.preparation_stage_results or {})
@@ -951,18 +860,7 @@ class DiscoveryUpstreamPreparationService:
             "TECHNICAL_CONSISTENCY": lambda: TechnicalConsistencyService(
                 self._source_session(), self._disc
             ),
-            "TECHNICAL_SECTOR_AGGREGATION": lambda: TechnicalSectorAggregationService(self._disc),
-            "TECHNICAL_SECTOR_SCORE": lambda: TechnicalSectorScoreService(self._disc),
-            "TECHNICAL_INDUSTRY_AGGREGATION": lambda: TechnicalIndustryAggregationService(
-                self._disc
-            ),
-            "TECHNICAL_INDUSTRY_SCORE": lambda: TechnicalIndustryScoreService(self._disc),
-            "TECHNICAL_BASIC_INDUSTRY_AGGREGATION": lambda: TechnicalBasicIndustryAggregationService(
-                self._disc
-            ),
-            "TECHNICAL_BASIC_INDUSTRY_SCORE": lambda: TechnicalBasicIndustryScoreService(
-                self._disc
-            ),
+            "COMPANY_TECHNICAL_SCORE": lambda: CompanyTechnicalScoreService(self._disc),
             "FUNDAMENTAL_PERIOD_SELECTION": lambda: FundamentalPeriodSelectionService(
                 self._source_session()
             ),
@@ -993,47 +891,6 @@ class DiscoveryUpstreamPreparationService:
                 self._disc
             ),
             "COMPANY_FUNDAMENTAL_SCORE": lambda: CompanyFundamentalScoreService(self._disc),
-            "FUNDAMENTAL_SECTOR_AGGREGATION": lambda: FundamentalSectorAggregationService(
-                self._disc
-            ),
-            "FUNDAMENTAL_SECTOR_METRIC_NORMALIZATION": lambda: FundamentalSectorMetricNormalizationService(
-                self._disc
-            ),
-            "FUNDAMENTAL_SECTOR_TRANSITION_SCORE": lambda: FundamentalSectorTransitionScoreService(
-                self._disc
-            ),
-            "FUNDAMENTAL_SECTOR_PILLAR_SCORE": lambda: FundamentalSectorPillarScoreService(
-                self._disc
-            ),
-            "FUNDAMENTAL_SECTOR_SCORE": lambda: FundamentalSectorScoreService(self._disc),
-            "FUNDAMENTAL_INDUSTRY_AGGREGATION": lambda: FundamentalIndustryAggregationService(
-                self._disc
-            ),
-            "FUNDAMENTAL_INDUSTRY_METRIC_NORMALIZATION": lambda: FundamentalIndustryMetricNormalizationService(
-                self._disc
-            ),
-            "FUNDAMENTAL_INDUSTRY_TRANSITION_SCORE": lambda: FundamentalIndustryTransitionScoreService(
-                self._disc
-            ),
-            "FUNDAMENTAL_INDUSTRY_PILLAR_SCORE": lambda: FundamentalIndustryPillarScoreService(
-                self._disc
-            ),
-            "FUNDAMENTAL_INDUSTRY_SCORE": lambda: FundamentalIndustryScoreService(self._disc),
-            "FUNDAMENTAL_BASIC_INDUSTRY_AGGREGATION": lambda: FundamentalBasicIndustryAggregationService(
-                self._disc
-            ),
-            "FUNDAMENTAL_BASIC_INDUSTRY_METRIC_NORMALIZATION": lambda: FundamentalBasicIndustryMetricNormalizationService(
-                self._disc
-            ),
-            "FUNDAMENTAL_BASIC_INDUSTRY_TRANSITION_SCORE": lambda: FundamentalBasicIndustryTransitionScoreService(
-                self._disc
-            ),
-            "FUNDAMENTAL_BASIC_INDUSTRY_PILLAR_SCORE": lambda: FundamentalBasicIndustryPillarScoreService(
-                self._disc
-            ),
-            "FUNDAMENTAL_BASIC_INDUSTRY_SCORE": lambda: FundamentalBasicIndustryScoreService(
-                self._disc
-            ),
         }
 
     def _source_session(self) -> Session:
@@ -1062,19 +919,6 @@ class DiscoveryUpstreamPreparationService:
             E_SERVICE_UNAVAILABLE,
             "Required preparation service is unavailable: UNIVERSE_SNAPSHOT.",
         )
-
-    def _call_optional_company_technical_finalizer(
-        self,
-        finalizer: Any,
-        run_id: str,
-        horizon: str,
-    ) -> None:
-        for method_name in ("finalize_company_scores", "score_companies", "calculate_company_scores"):
-            if hasattr(finalizer, method_name):
-                getattr(finalizer, method_name)(run_id, horizon)
-                return
-        if callable(finalizer):
-            finalizer(run_id, horizon)
 
     def _has_running_stage(self, stage_results: Dict[str, Any]) -> bool:
         for result in stage_results.values():
@@ -1132,6 +976,51 @@ def _safe_message(value: Any) -> str:
     first_line = re.sub(r"(?i)bearer\s+[a-z0-9._\-]+", "Bearer [REDACTED]", first_line)
     first_line = re.sub(r"(?i)(postgresql|mysql|sqlite)://\S+", "[REDACTED_DSN]", first_line)
     return first_line[:300]
+
+
+def _error_message_for_code(code: str) -> str:
+    if code == BENCHMARK_DATA_UNAVAILABLE:
+        return BENCHMARK_DATA_UNAVAILABLE_MESSAGE
+    return code
+
+
+def _horizon_failure_details(
+    stage: str,
+    horizons: Dict[str, Dict[str, Any]],
+    required_horizons: Set[str],
+) -> Tuple[str, str, str]:
+    failed = [
+        horizons.get(horizon) or {}
+        for horizon in sorted(required_horizons)
+        if (horizons.get(horizon) or {}).get("status") == STAGE_FAILED
+    ]
+    codes = sorted({str(result.get("error_code") or E_STAGE_FAILED) for result in failed})
+    messages = sorted(
+        {
+            _safe_message(result.get("error_message") or _error_message_for_code(result.get("error_code") or E_STAGE_FAILED))
+            for result in failed
+        }
+    )
+    failed_horizons = ",".join(
+        horizon
+        for horizon in sorted(required_horizons)
+        if (horizons.get(horizon) or {}).get("status") == STAGE_FAILED
+    )
+    if len(codes) == 1:
+        return codes[0], messages[0] if messages else _error_message_for_code(codes[0]), failed_horizons
+    return E_STAGE_FAILED, f"{stage} failed for every required horizon.", failed_horizons
+
+
+def _stage_failure_details(stage_result: Dict[str, Any]) -> Tuple[str, str, str]:
+    horizons = stage_result.get("horizons") or {}
+    failed_horizons = ",".join(
+        horizon
+        for horizon, result in sorted(horizons.items())
+        if isinstance(result, dict) and result.get("status") == STAGE_FAILED
+    )
+    code = stage_result.get("error_code") or E_STAGE_FAILED
+    message = _safe_message(stage_result.get("error_message") or _error_message_for_code(code))
+    return code, message, failed_horizons or "-"
 
 
 def _is_safe_metadata_value(value: Any) -> bool:

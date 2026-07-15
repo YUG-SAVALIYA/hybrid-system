@@ -10,7 +10,7 @@ from services.benchmark.benchmark_importer import BenchmarkImporter
 
 def main():
     parser = argparse.ArgumentParser(description="Import benchmark data from CSV or JSON.")
-    parser.add_argument("--benchmark", required=True, help="Benchmark code (e.g., NIFTY_500)")
+    parser.add_argument("--benchmark", required=True, help="Benchmark code (e.g., NIFTY500)")
     parser.add_argument("--name", default=None, help="Benchmark name (e.g., NIFTY 500)")
     parser.add_argument("--file", required=True, help="Path to the import file")
     parser.add_argument("--source", default="Manual CLI Import", help="Source name of the data")

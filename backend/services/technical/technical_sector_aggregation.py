@@ -26,7 +26,7 @@ class TechnicalSectorAggregationService:
     def __init__(self, discovery_session: Session):
         self._disc = discovery_session
 
-    def aggregate_sectors(self, run_id: str, horizon: str) -> None:
+    def aggregate_sectors(self, run_id: str, horizon: str, sectors: list[str] | None = None) -> None:
         # 1. Fetch all company technical metrics for the run and horizon
         records = self._disc.execute(
             text("""
@@ -50,6 +50,8 @@ class TechnicalSectorAggregationService:
             # Skip invalid/empty sectors
             sec = (r.sector or "").strip()
             if not sec:
+                continue
+            if sectors is not None and sec not in sectors:
                 continue
             if sec not in sectors_map:
                 sectors_map[sec] = []

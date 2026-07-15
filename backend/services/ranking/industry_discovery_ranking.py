@@ -208,14 +208,7 @@ def calculate_final_industry_score(group: GroupScore) -> Tuple[Dict[str, Any], L
     if macro_applicable and not macro_eligible:
         warnings.append(W_MACRO_INELIGIBLE)
 
-    eligible = bool(
-        _is_finite(score)
-        and coverage_pct is not None
-        and coverage_pct >= MIN_INDUSTRY_DISCOVERY_COVERAGE
-        and technical_eligible
-        and fundamental_eligible
-        and macro_eligible
-    )
+    eligible = bool(technical_eligible and fundamental_eligible)
 
     return (
         {

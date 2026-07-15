@@ -202,11 +202,18 @@ class MacroIndustryScoreService:
     def __init__(self, discovery_session: Session):
         self._disc = discovery_session
 
-    def calculate_industry_scores(self, run_id: str) -> Dict[str, Any]:
+    def calculate_industry_scores(self, run_id: str, horizon: str | None = None) -> Dict[str, Any]:
+        impact_query = self._disc.query(MacroEntityImpact).filter_by(
+            run_id=run_id, entity_type=ENTITY_TYPE_INDUSTRY
+        )
+        if horizon is not None:
+            impact_query = impact_query.filter_by(horizon=horizon)
         impacts = (
-            self._disc.query(MacroEntityImpact)
-            .filter_by(run_id=run_id, entity_type=ENTITY_TYPE_INDUSTRY)
-            .order_by(MacroEntityImpact.parent_sector.asc(), MacroEntityImpact.entity_name.asc())
+            impact_query.order_by(
+                MacroEntityImpact.horizon.asc(),
+                MacroEntityImpact.parent_sector.asc(),
+                MacroEntityImpact.entity_name.asc(),
+            )
             .all()
         )
         metadata = {
@@ -232,17 +239,16 @@ class MacroIndustryScoreService:
             for impact in impacts
         }
         for impact in impacts:
-            groups = (
-                self._disc.query(GroupScore)
-                .filter_by(
-                    run_id=run_id,
-                    entity_type=ENTITY_TYPE_INDUSTRY,
-                    entity_name=impact.entity_name,
-                    parent_sector=impact.parent_sector,
-                    parent_industry="",
-                )
-                .all()
+            group_query = self._disc.query(GroupScore).filter_by(
+                run_id=run_id,
+                entity_type=ENTITY_TYPE_INDUSTRY,
+                entity_name=impact.entity_name,
+                parent_sector=impact.parent_sector,
+                parent_industry="",
             )
+            if horizon is not None:
+                group_query = group_query.filter_by(horizon=impact.horizon)
+            groups = group_query.all()
             details, warnings = calculate_industry_macro_score(
                 impact.category_impacts or {},
                 impact.overall_impact or {},
@@ -255,7 +261,14 @@ class MacroIndustryScoreService:
                     metadata["scored_rows_by_horizon"].get(group.horizon, 0) + 1
                 )
 
-        metadata["stale_score_count"] = self._cleanup_stale_scores(run_id, current_keys)
+        metadata["stale_score_count"] += self._cleanup_stale_scores(
+            run_id,
+            horizon,
+            {
+                (impact.parent_sector or "", impact.entity_name or "")
+                for impact in impacts
+            },
+        )
         self._disc.commit()
         return metadata
 
@@ -273,12 +286,11 @@ class MacroIndustryScoreService:
         group.warnings = sorted(existing_warnings)
         group.calculation_details = calc
 
-    def _cleanup_stale_scores(self, run_id: str, current_keys: set[Tuple[str, str]]) -> int:
-        groups = (
-            self._disc.query(GroupScore)
-            .filter_by(run_id=run_id, entity_type=ENTITY_TYPE_INDUSTRY)
-            .all()
-        )
+    def _cleanup_stale_scores(self, run_id: str, horizon: str | None, current_keys: set[Tuple[str, str]]) -> int:
+        group_query = self._disc.query(GroupScore).filter_by(run_id=run_id, entity_type=ENTITY_TYPE_INDUSTRY)
+        if horizon is not None:
+            group_query = group_query.filter_by(horizon=horizon)
+        groups = group_query.all()
         stale_count = 0
         for group in groups:
             calc = copy.deepcopy(group.calculation_details or {})

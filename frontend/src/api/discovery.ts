@@ -33,6 +33,7 @@ export interface DiscoveryPrepareRequest {
 export interface DiscoveryExecuteRequest {
   resume: boolean;
   force_restart: boolean;
+  target_horizon?: string | null;
 }
 
 export interface DiscoveryRunCreateData {
@@ -45,6 +46,7 @@ export interface DiscoveryRunCreateData {
 export interface DiscoveryGroupResult {
   name: string;
   rank?: number | null;
+  constituent_count?: number | null;
   final_score?: number | null;
   technical_score?: number | null;
   fundamental_score?: number | null;
@@ -72,9 +74,9 @@ export interface DiscoveryStockResult {
 
 export interface DiscoveryHorizonResult {
   status: DiscoveryStageStatus;
-  sector?: DiscoveryGroupResult | null;
-  industry?: DiscoveryGroupResult | null;
-  basic_industry?: DiscoveryGroupResult | null;
+  sectors: DiscoveryGroupResult[];
+  industries: DiscoveryGroupResult[];
+  basic_industries: DiscoveryGroupResult[];
   stocks: DiscoveryStockResult[];
   warnings: string[];
 }
@@ -148,6 +150,7 @@ async function request<T>(
     signal,
     headers: {
       "Content-Type": "application/json",
+      "ngrok-skip-browser-warning": "true",
       ...(init.headers || {}),
     },
   });

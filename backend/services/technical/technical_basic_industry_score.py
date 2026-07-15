@@ -29,7 +29,13 @@ class TechnicalBasicIndustryScoreService:
     def __init__(self, discovery_session: Session):
         self._disc = discovery_session
 
-    def calculate_basic_industry_scores(self, run_id: str, horizon: str) -> None:
+    def calculate_basic_industry_scores(
+        self,
+        run_id: str,
+        horizon: str,
+        parent_sector: str | None = None,
+        parent_industry: str | None = None,
+    ) -> None:
         records = self._disc.execute(
             text("""
                 SELECT 
@@ -38,8 +44,15 @@ class TechnicalBasicIndustryScoreService:
                     warnings, calculation_details
                 FROM group_scores
                 WHERE run_id = :r AND horizon = :h AND entity_type = 'BASIC_INDUSTRY'
+                  AND (:parent_sector IS NULL OR parent_sector = :parent_sector)
+                  AND (:parent_industry IS NULL OR parent_industry = :parent_industry)
             """),
-            {"r": run_id, "h": horizon}
+            {
+                "r": run_id,
+                "h": horizon,
+                "parent_sector": parent_sector,
+                "parent_industry": parent_industry,
+            }
         ).fetchall()
 
         if not records:

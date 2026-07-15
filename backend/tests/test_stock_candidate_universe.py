@@ -103,6 +103,8 @@ def _make_technical(
         benchmark_start_close=950.0,
         benchmark_return=0.05,
         relative_return=0.06,
+        final_technical_score=80.0,
+        technical_eligible_for_selection=True,
         average_volume_current=1000.0,
         average_volume_previous=900.0,
         volume_change=0.1,

@@ -145,6 +145,7 @@ class CompanyFundamentalScoreService:
             rec.calculation_details = new_calc
             rec.final_fundamental_score = final_score
             rec.fundamental_status = status
+            rec.data_coverage = coverage_pct
             rec.fundamental_eligible_for_selection = eligible
             
         self._disc.commit()

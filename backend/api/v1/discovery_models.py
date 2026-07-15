@@ -62,9 +62,9 @@ class DiscoveryHorizonResult(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     status: HorizonStatus
-    sector: Optional[DiscoveryGroupResult] = None
-    industry: Optional[DiscoveryGroupResult] = None
-    basic_industry: Optional[DiscoveryGroupResult] = None
+    sectors: List[DiscoveryGroupResult] = Field(default_factory=list)
+    industries: List[DiscoveryGroupResult] = Field(default_factory=list)
+    basic_industries: List[DiscoveryGroupResult] = Field(default_factory=list)
     stocks: List[DiscoveryStockResult] = Field(default_factory=list)
     warnings: List[str] = Field(default_factory=list)
 
@@ -112,6 +112,7 @@ class DiscoveryExecuteRequest(BaseModel):
 
     resume: StrictBool = True
     force_restart: StrictBool = False
+    target_horizon: Optional[str] = None
 
 
 class DiscoveryExecuteData(BaseModel):

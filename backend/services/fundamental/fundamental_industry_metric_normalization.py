@@ -76,12 +76,22 @@ class FundamentalIndustryMetricNormalizationService:
     def __init__(self, discovery_session: Session):
         self._disc = discovery_session
 
-    def normalize_industry_metrics(self, run_id: str) -> None:
-        industries = self._disc.query(GroupScore).filter_by(
-            run_id=run_id, 
+    def normalize_industry_metrics(
+        self,
+        run_id: str,
+        horizon: str | None = None,
+        parent_sector: str | None = None,
+    ) -> None:
+        query = self._disc.query(GroupScore).filter_by(
+            run_id=run_id,
             entity_type="INDUSTRY",
-            parent_industry=""
-        ).all()
+            parent_industry="",
+        )
+        if horizon is not None:
+            query = query.filter_by(horizon=horizon)
+        if parent_sector is not None:
+            query = query.filter(GroupScore.parent_sector == parent_sector)
+        industries = query.all()
         
         if not industries:
             return

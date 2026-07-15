@@ -185,14 +185,7 @@ def calculate_final_sector_score(group: GroupScore) -> Tuple[Dict[str, Any], Lis
     if macro_applicable and not macro_eligible:
         warnings.append(W_MACRO_INELIGIBLE)
 
-    eligible = bool(
-        _is_finite(score)
-        and coverage_pct is not None
-        and coverage_pct >= MIN_SECTOR_DISCOVERY_COVERAGE
-        and technical_eligible
-        and fundamental_eligible
-        and macro_eligible
-    )
+    eligible = bool(technical_eligible and fundamental_eligible)
 
     return (
         {
@@ -254,7 +247,11 @@ class SectorDiscoveryRankingService:
             if results[sector.entity_name]["eligible_for_selection"]
         ]
         eligible_names.sort(
-            key=lambda name: (-results[name]["score"], name)
+            key=lambda name: (
+                0 if results[name]["score"] is None else 1,
+                -(results[name]["score"] or 0.0),
+                name
+            )
         )
 
         for rank, name in enumerate(eligible_names, start=1):

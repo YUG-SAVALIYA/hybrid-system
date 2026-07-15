@@ -25,26 +25,23 @@ from api.v1.discovery_models import (
     DiscoveryRunCreateSuccessResponse,
 )
 from database import DiscoverySessionLocal
-from services.ranking.basic_industry_discovery_ranking import BasicIndustryDiscoveryRankingService
 from services.discovery.discovery_pipeline_orchestrator import (
-    BASIC_INDUSTRY_IMPACT,
-    BASIC_INDUSTRY_MACRO_SCORE,
-    BASIC_INDUSTRY_RANKING,
+    BASIC_INDUSTRY_SELECTION,
     E_ALREADY_RUNNING,
     E_RUN_NOT_FOUND,
     E_UPSTREAM_UNAVAILABLE,
-    INDUSTRY_IMPACT,
-    INDUSTRY_MACRO_SCORE,
-    INDUSTRY_RANKING,
+    INDUSTRY_SELECTION,
     MACRO_FILTER,
     MACRO_SEARCH,
-    SECTOR_IMPACT,
-    SECTOR_MACRO_SCORE,
-    SECTOR_RANKING,
-    STOCK_CANDIDATE_SCORE,
-    STOCK_CANDIDATE_UNIVERSE,
-    STOCK_RANKING,
+    SECTOR_SELECTION,
+    STOCK_SELECTION,
     DiscoveryPipelineOrchestrator,
+)
+from services.discovery.discovery_selection_stages import (
+    BasicIndustrySelectionStage,
+    IndustrySelectionStage,
+    SectorSelectionStage,
+    StockSelectionStage,
 )
 from services.discovery.discovery_run_creation import (
     E_INVALID_AS_OF_DATE,
@@ -61,19 +58,8 @@ from services.discovery.discovery_upstream_preparation import (
     E_SERVICE_UNAVAILABLE,
     DiscoveryUpstreamPreparationService,
 )
-from services.ranking.industry_discovery_ranking import IndustryDiscoveryRankingService
-from services.macro.macro_basic_industry_impact import MacroBasicIndustryImpactService
-from services.macro.macro_basic_industry_score import MacroBasicIndustryScoreService
 from services.macro.macro_filter_summary import MacroFilterSummaryService
-from services.macro.macro_industry_impact import MacroIndustryImpactService
-from services.macro.macro_industry_score import MacroIndustryScoreService
-from services.macro.macro_sector_impact import MacroSectorImpactService
-from services.macro.macro_sector_score import MacroSectorScoreService
 from services.macro.parallel_macro_search import ParallelMacroSearchProvider
-from services.ranking.sector_discovery_ranking import SectorDiscoveryRankingService
-from services.stock.stock_candidate_score import StockCandidateScoreService
-from services.stock.stock_candidate_universe import StockCandidateUniverseService
-from services.stock.stock_discovery_ranking import StockDiscoveryRankingService
 
 
 logger = logging.getLogger(__name__)
@@ -119,18 +105,10 @@ def _default_pipeline_services(session: Session):
     return {
         MACRO_SEARCH: ParallelMacroSearchProvider(session),
         MACRO_FILTER: MacroFilterSummaryService(session),
-        SECTOR_IMPACT: MacroSectorImpactService(session),
-        SECTOR_MACRO_SCORE: MacroSectorScoreService(session),
-        SECTOR_RANKING: SectorDiscoveryRankingService(session),
-        INDUSTRY_IMPACT: MacroIndustryImpactService(session),
-        INDUSTRY_MACRO_SCORE: MacroIndustryScoreService(session),
-        INDUSTRY_RANKING: IndustryDiscoveryRankingService(session),
-        BASIC_INDUSTRY_IMPACT: MacroBasicIndustryImpactService(session),
-        BASIC_INDUSTRY_MACRO_SCORE: MacroBasicIndustryScoreService(session),
-        BASIC_INDUSTRY_RANKING: BasicIndustryDiscoveryRankingService(session),
-        STOCK_CANDIDATE_UNIVERSE: StockCandidateUniverseService(session),
-        STOCK_CANDIDATE_SCORE: StockCandidateScoreService(session),
-        STOCK_RANKING: StockDiscoveryRankingService(session),
+        SECTOR_SELECTION: SectorSelectionStage(session),
+        INDUSTRY_SELECTION: IndustrySelectionStage(session),
+        BASIC_INDUSTRY_SELECTION: BasicIndustrySelectionStage(session),
+        STOCK_SELECTION: StockSelectionStage(session),
     }
 
 
@@ -280,6 +258,41 @@ def get_discovery_result(
     return body
 
 
+@router.get(
+    "/runs/{run_id}/constituents",
+)
+def get_discovery_constituents(
+    run_id: str,
+    horizon: str,
+    entity_type: str,
+    entity_name: str,
+    parent_sector: str = "",
+    parent_industry: str = "",
+    service: DiscoveryResultService = Depends(get_discovery_result_service),
+):
+    try:
+        clean_run_id = validate_run_id(run_id)
+    except ValueError:
+        return _error_response(
+            422,
+            INVALID_RUN_ID,
+            "Discovery run ID is invalid.",
+        )
+
+    try:
+        result = service.get_group_constituents(clean_run_id, horizon, entity_type, entity_name, parent_sector, parent_industry)
+    except Exception:
+        logger.exception("Failed to load discovery constituents")
+        return _error_response(
+            500,
+            RESULT_UNAVAILABLE,
+            "The discovery constituents could not be loaded.",
+        )
+
+    return {"success": True, "data": result}
+
+
+
 @router.post(
     "/runs/{run_id}/execute",
     response_model=DiscoveryExecuteResponse,
@@ -303,6 +316,7 @@ def execute_discovery_run(
             clean_run_id,
             resume=request.resume,
             force_restart=request.force_restart,
+            target_horizon=request.target_horizon,
         )
     except Exception:
         logger.exception("Failed to execute discovery pipeline")

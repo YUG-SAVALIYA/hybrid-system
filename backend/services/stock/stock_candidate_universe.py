@@ -19,6 +19,8 @@ from models.discovery import (
 )
 
 
+ENTITY_TYPE_SECTOR = "SECTOR"
+ENTITY_TYPE_INDUSTRY = "INDUSTRY"
 ENTITY_TYPE_BASIC_INDUSTRY = "BASIC_INDUSTRY"
 STATUS_ELIGIBLE = "ELIGIBLE"
 STATUS_TECHNICAL_UNAVAILABLE = "TECHNICAL_UNAVAILABLE"
@@ -34,8 +36,8 @@ W_FUNDAMENTAL_METRIC_UNAVAILABLE = "STOCK_FUNDAMENTAL_METRIC_UNAVAILABLE"
 W_FUNDAMENTAL_INELIGIBLE = "STOCK_FUNDAMENTAL_INELIGIBLE"
 W_STALE_REMOVED = "STALE_STOCK_CANDIDATE_REMOVED"
 
-TECHNICAL_MIN_COVERAGE = float(getattr(config, "MIN_GROUP_TECHNICAL_COVERAGE", 75.0))
-FUNDAMENTAL_MIN_COVERAGE = 75.0
+TECHNICAL_MIN_COVERAGE = float(getattr(config, "MIN_COMPANY_TECHNICAL_COVERAGE", 0.0))
+FUNDAMENTAL_MIN_COVERAGE = float(getattr(config, "MIN_COMPANY_FUNDAMENTAL_COVERAGE", 0.0))
 
 
 def _is_finite(value: Any) -> bool:
@@ -158,6 +160,7 @@ class StockCandidateUniverseService:
         }
 
     def _selected_hierarchy(self, run_id: str, horizon: str) -> Optional[Dict[str, str]]:
+        # 1. Try Basic Industry
         rows = (
             self._disc.query(DiscoverySelection)
             .filter_by(
@@ -175,51 +178,88 @@ class StockCandidateUniverseService:
             basic = (row.entity_name or "").strip()
             if sector and industry and basic:
                 return {"sector": sector, "industry": industry, "basic_industry": basic}
+        
+        # 2. Fall back to Industry
+        rows = (
+            self._disc.query(DiscoverySelection)
+            .filter_by(
+                run_id=run_id,
+                horizon=horizon,
+                entity_type=ENTITY_TYPE_INDUSTRY,
+                selected=True,
+            )
+            .order_by(DiscoverySelection.rank.asc(), DiscoverySelection.entity_name.asc())
+            .all()
+        )
+        for row in rows:
+            sector = (row.parent_sector or "").strip()
+            industry = (row.entity_name or "").strip()
+            if sector and industry:
+                return {"sector": sector, "industry": industry, "basic_industry": None}
+
+        # 3. Fall back to Sector
+        rows = (
+            self._disc.query(DiscoverySelection)
+            .filter_by(
+                run_id=run_id,
+                horizon=horizon,
+                entity_type=ENTITY_TYPE_SECTOR,
+                selected=True,
+            )
+            .order_by(DiscoverySelection.rank.asc(), DiscoverySelection.entity_name.asc())
+            .all()
+        )
+        for row in rows:
+            sector = (row.entity_name or "").strip()
+            if sector:
+                return {"sector": sector, "industry": None, "basic_industry": None}
+
         return None
 
     def _load_company_universe(
         self,
         run_id: str,
         horizon: str,
-        hierarchy: Dict[str, str],
+        hierarchy: Dict[str, Optional[str]],
     ) -> Tuple[List[Dict[str, str]], int, int]:
         raw: List[Dict[str, str]] = []
-        for row in (
-            self._disc.query(CompanyTechnicalMetric)
-            .filter_by(
-                run_id=run_id,
-                horizon=horizon,
-                sector=hierarchy["sector"],
-                industry=hierarchy["industry"],
-                basic_industry=hierarchy["basic_industry"],
-            )
-            .all()
-        ):
+        
+        tech_query = self._disc.query(CompanyTechnicalMetric).filter_by(
+            run_id=run_id,
+            horizon=horizon,
+            sector=hierarchy["sector"]
+        )
+        if hierarchy.get("industry"):
+            tech_query = tech_query.filter_by(industry=hierarchy["industry"])
+        if hierarchy.get("basic_industry"):
+            tech_query = tech_query.filter_by(basic_industry=hierarchy["basic_industry"])
+            
+        for row in tech_query.all():
             raw.append(self._company_item(row.source_company_id, row.symbol, row.sector, row.industry, row.basic_industry))
 
-        for row in (
-            self._disc.query(CompanyFundamentalMetric)
-            .filter_by(
-                run_id=run_id,
-                sector=hierarchy["sector"],
-                industry=hierarchy["industry"],
-                basic_industry=hierarchy["basic_industry"],
-            )
-            .all()
-        ):
+        fund_query = self._disc.query(CompanyFundamentalMetric).filter_by(
+            run_id=run_id,
+            sector=hierarchy["sector"]
+        )
+        if hierarchy.get("industry"):
+            fund_query = fund_query.filter_by(industry=hierarchy["industry"])
+        if hierarchy.get("basic_industry"):
+            fund_query = fund_query.filter_by(basic_industry=hierarchy["basic_industry"])
+
+        for row in fund_query.all():
             raw.append(self._company_item(row.source_company_id, row.symbol, row.sector, row.industry, row.basic_industry))
 
-        for row in (
-            self._disc.query(EligibleUniverseSnapshot)
-            .filter_by(
-                run_id=run_id,
-                horizon=horizon,
-                sector=hierarchy["sector"],
-                industry=hierarchy["industry"],
-                basic_industry=hierarchy["basic_industry"],
-            )
-            .all()
-        ):
+        snapshot_query = self._disc.query(EligibleUniverseSnapshot).filter_by(
+            run_id=run_id,
+            horizon=horizon,
+            sector=hierarchy["sector"]
+        )
+        if hierarchy.get("industry"):
+            snapshot_query = snapshot_query.filter_by(industry=hierarchy["industry"])
+        if hierarchy.get("basic_industry"):
+            snapshot_query = snapshot_query.filter_by(basic_industry=hierarchy["basic_industry"])
+
+        for row in snapshot_query.all():
             raw.append(self._company_item(row.source_company_id, row.symbol, row.sector, row.industry, row.basic_industry))
 
         invalid_count = 0
@@ -288,7 +328,9 @@ class StockCandidateUniverseService:
         coverage_pct = _coverage_pct(row.data_coverage)
         calc = row.calculation_details or {}
         eligible = bool(
-            not _status_unavailable(calc)
+            row.technical_eligible_for_selection is True
+            and _is_finite(row.final_technical_score)
+            and not _status_unavailable(calc)
             and row.return_available is True
             and bool(row.benchmark_candle_date)
             and coverage_pct is not None

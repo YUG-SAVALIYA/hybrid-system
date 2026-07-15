@@ -24,7 +24,7 @@ from services.macro.macro_filter_summary import CATEGORIES
 
 SUMMARY_TYPE = "MACRO_FILTER"
 ENTITY_TYPE_SECTOR = "SECTOR"
-MAX_SECTORS_PER_BATCH = 8
+MAX_SECTORS_PER_BATCH = 999
 PROMPT_VERSION = getattr(config, "MACRO_SECTOR_IMPACT_PROMPT_VERSION", "1.0")
 MODEL_NAME = getattr(config, "LLM_MODEL_NAME", "gemini-2.0-flash")
 
@@ -72,29 +72,22 @@ STRICT RULES:
 
 class _LLMCaller:
     def __init__(self):
-        import google.generativeai as genai
-
-        if not config.LLM_API_KEY:
-            raise ValueError("LLM_API_KEY is not set")
-        genai.configure(api_key=config.LLM_API_KEY)
-        self._model = genai.GenerativeModel(
-            model_name=MODEL_NAME,
-            system_instruction=SYSTEM_PROMPT,
-            generation_config={"response_mime_type": "application/json"},
-        )
+        from services.macro.gemini_client import GeminiCaller
+        self._client = GeminiCaller()
 
     def call(self, prompt: str) -> str:
-        response = self._model.generate_content(prompt)
-        return response.text
+        return self._client.call(prompt, system_prompt=SYSTEM_PROMPT)
 
 
 def _extract_json(text: str) -> Optional[Dict[str, Any]]:
     if not isinstance(text, str):
         return None
-    stripped = text.strip()
-    if not stripped.startswith("{") or not stripped.endswith("}"):
-        return None
     try:
+        start_idx = text.find("{")
+        end_idx = text.rfind("}")
+        if start_idx == -1 or end_idx == -1 or start_idx > end_idx:
+            return None
+        stripped = text[start_idx : end_idx + 1]
         parsed = json.loads(stripped)
     except Exception:
         return None
@@ -507,9 +500,7 @@ class MacroSectorImpactService:
         self.last_batches: List[List[str]] = []
 
     def _get_llm(self):
-        if self._llm is None:
-            self._llm = _LLMCaller()
-        return self._llm
+        return self._llm if self._llm is not None else _LLMCaller()
 
     def _llm_call(self, prompt: str) -> str:
         return self._get_llm().call(prompt)
@@ -535,16 +526,20 @@ class MacroSectorImpactService:
                 sectors.append(value.strip())
         return sectors
 
-    def _load_sector_universe(self, run_id: str) -> List[str]:
+    def _load_sector_universe(self, run_id: str, horizon: str | None = None) -> List[str]:
         sectors = self._sector_values_from(GroupScore.entity_name)
-        sectors = [
-            sector
-            for sector in sectors
-            if self._disc.query(GroupScore)
-            .filter_by(run_id=run_id, entity_type=ENTITY_TYPE_SECTOR, entity_name=sector)
-            .first()
-            is not None
-        ]
+        filtered: List[str] = []
+        for sector in sectors:
+            query = self._disc.query(GroupScore).filter_by(
+                run_id=run_id,
+                entity_type=ENTITY_TYPE_SECTOR,
+                entity_name=sector,
+            )
+            if horizon is not None:
+                query = query.filter_by(horizon=horizon)
+            if query.first() is not None:
+                filtered.append(sector)
+        sectors = filtered
         if not sectors:
             sectors = self._sector_values_from(CompanyTechnicalMetric.sector)
         if not sectors:
@@ -600,7 +595,7 @@ class MacroSectorImpactService:
             )
         return {}, repaired_sector_warnings, list(dict.fromkeys(batch_warnings + repaired_batch_warnings + [W_LLM_INVALID])), True
 
-    def generate_sector_impacts(self, run_id: str) -> Dict[str, Any]:
+    def generate_sector_impacts(self, run_id: str, horizon: str | None = None) -> Dict[str, Any]:
         summary = self._latest_summary(run_id)
         if summary is None:
             self.last_metadata = {}
@@ -611,7 +606,7 @@ class MacroSectorImpactService:
                 "impact_ids": [],
             }
 
-        sectors = self._load_sector_universe(run_id)
+        sectors = self._load_sector_universe(run_id, horizon)
         if not sectors:
             self.last_metadata = {}
             return {
@@ -629,16 +624,22 @@ class MacroSectorImpactService:
         global_warnings: List[str] = []
         fallback_sectors = set()
 
+        import concurrent.futures
+
         self.last_batches = _batch(sectors, MAX_SECTORS_PER_BATCH)
-        for sector_batch in self.last_batches:
+        
+        def _process_batch(sector_batch):
             raw_text = self._llm_call(
                 _build_batch_prompt(
                     sector_batch, category_summaries, overall_synthesis, allowed_refs
                 )
             )
-            outputs, sector_warnings, batch_warnings, repaired = self._validate_or_repair_batch(
-                sector_batch, raw_text, allowed_refs
-            )
+            return sector_batch, self._validate_or_repair_batch(sector_batch, raw_text, allowed_refs)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            results = list(executor.map(_process_batch, self.last_batches))
+            
+        for sector_batch, (outputs, sector_warnings, batch_warnings, repaired) in results:
             global_warnings.extend(batch_warnings)
             for sector, warnings in sector_warnings.items():
                 all_sector_warnings[sector].extend(warnings)
@@ -662,6 +663,7 @@ class MacroSectorImpactService:
             impact_ids.append(
                 self._persist_sector_impact(
                     run_id=run_id,
+                    horizon=horizon,
                     source_summary_id=summary.id,
                     sector=sector,
                     output=output,
@@ -686,17 +688,20 @@ class MacroSectorImpactService:
     def _persist_sector_impact(
         self,
         run_id: str,
+        horizon: str | None,
         source_summary_id: str,
         sector: str,
         output: Dict[str, Any],
         warnings: List[str],
         status: str,
     ) -> str:
+        horizon_key = horizon or ""
         overall = output["overall_impact"]
         existing = (
             self._disc.query(MacroEntityImpact)
             .filter_by(
                 run_id=run_id,
+                horizon=horizon_key,
                 entity_type=ENTITY_TYPE_SECTOR,
                 entity_name=sector,
                 parent_sector="",
@@ -709,6 +714,7 @@ class MacroSectorImpactService:
             existing = MacroEntityImpact(
                 id=str(uuid.uuid4()),
                 run_id=run_id,
+                horizon=horizon_key,
                 entity_type=ENTITY_TYPE_SECTOR,
                 entity_name=sector,
                 parent_sector="",

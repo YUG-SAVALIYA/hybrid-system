@@ -66,6 +66,9 @@ class CompanyTechnicalMetric(DiscoveryBase):
     positive_period_ratio = Column(Float)
     benchmark_outperformance_ratio = Column(Float)
     company_consistency_score = Column(Float)
+    final_technical_score = Column(Float)
+    technical_status = Column(String)
+    technical_eligible_for_selection = Column(Boolean)
     # Component availability flags
     return_available = Column(Boolean)
     volume_available = Column(Boolean)
@@ -196,6 +199,7 @@ class MacroEntityImpact(DiscoveryBase):
 
     id = Column(String, primary_key=True)
     run_id = Column(String, nullable=False)
+    horizon = Column(String, nullable=False, server_default="", default="")
     source_summary_id = Column(String)
     source_parent_impact_id = Column(String)
     entity_type = Column(String, nullable=False)     # SECTOR / INDUSTRY / BASIC_INDUSTRY
@@ -219,7 +223,7 @@ class MacroEntityImpact(DiscoveryBase):
 
     __table_args__ = (
         UniqueConstraint(
-            'run_id', 'entity_type', 'entity_name', 'parent_sector', 'parent_industry',
+            'run_id', 'horizon', 'entity_type', 'entity_name', 'parent_sector', 'parent_industry',
             name='uq_macro_entity_impact_hierarchy'
         ),
     )

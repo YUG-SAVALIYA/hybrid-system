@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -5,6 +7,13 @@ from fastapi.responses import JSONResponse
 from api.v1.discovery_models import DiscoveryApiError, DiscoveryResultErrorResponse
 from api.v1.discovery_router import router as discovery_router
 
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+)
+logging.getLogger("services").setLevel(logging.INFO)
+logging.getLogger("api").setLevel(logging.INFO)
 
 app = FastAPI(title="Sector Discovery API")
 app.include_router(discovery_router, prefix="/api/v1")

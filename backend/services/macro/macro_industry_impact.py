@@ -88,29 +88,22 @@ STRICT RULES:
 
 class _LLMCaller:
     def __init__(self):
-        import google.generativeai as genai
-
-        if not config.LLM_API_KEY:
-            raise ValueError("LLM_API_KEY is not set")
-        genai.configure(api_key=config.LLM_API_KEY)
-        self._model = genai.GenerativeModel(
-            model_name=MODEL_NAME,
-            system_instruction=SYSTEM_PROMPT,
-            generation_config={"response_mime_type": "application/json"},
-        )
+        from services.macro.gemini_client import GeminiCaller
+        self._client = GeminiCaller()
 
     def call(self, prompt: str) -> str:
-        response = self._model.generate_content(prompt)
-        return response.text
+        return self._client.call(prompt, system_prompt=SYSTEM_PROMPT)
 
 
 def _extract_json(text: str) -> Optional[Dict[str, Any]]:
     if not isinstance(text, str):
         return None
-    stripped = text.strip()
-    if not stripped.startswith("{") or not stripped.endswith("}"):
-        return None
     try:
+        start_idx = text.find("{")
+        end_idx = text.rfind("}")
+        if start_idx == -1 or end_idx == -1 or start_idx > end_idx:
+            return None
+        stripped = text[start_idx : end_idx + 1]
         parsed = json.loads(stripped)
     except Exception:
         return None
@@ -306,17 +299,17 @@ def _validate_batch_response(
     allowed_refs: Dict[str, set[str]],
 ) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, List[str]], List[str]]:
     batch_warnings: List[str] = []
-    industry_warnings = {industry: [] for industry in requested_industries}
+    item_warnings = {name: [] for name in requested_industries}
     valid_outputs: Dict[str, Dict[str, Any]] = {}
     if not isinstance(raw, dict) or not isinstance(raw.get("industries"), list):
-        return {}, industry_warnings, [W_LLM_INVALID]
+        return {}, item_warnings, [W_LLM_INVALID]
 
     sanitized, removed_forbidden = _sanitize_forbidden_fields(copy.deepcopy(raw))
     if removed_forbidden:
         batch_warnings.append(W_INVALID_OVERALL)
     if sanitized.get("parent_sector") != parent_sector:
         batch_warnings.append(W_LLM_INVALID)
-        return {}, industry_warnings, batch_warnings
+        return {}, item_warnings, batch_warnings
 
     requested = set(requested_industries)
     seen = set()
@@ -335,43 +328,43 @@ def _validate_batch_response(
 
         raw_category_impacts = item.get("category_impacts")
         if not isinstance(raw_category_impacts, dict):
-            industry_warnings[industry].append(W_INVALID_CATEGORY)
+            item_warnings[industry].append(W_INVALID_CATEGORY)
             continue
         category_impacts: Dict[str, Any] = {}
         category_valid = True
         for category in CATEGORIES:
             if category not in raw_category_impacts:
-                industry_warnings[industry].append(W_INVALID_CATEGORY)
+                item_warnings[industry].append(W_INVALID_CATEGORY)
                 category_valid = False
                 continue
             validated, warnings = _validate_category_impact(
                 raw_category_impacts.get(category), category, allowed_refs
             )
             category_impacts[category] = validated
-            industry_warnings[industry].extend(warnings)
+            item_warnings[industry].extend(warnings)
         if not category_valid:
             continue
 
         if not isinstance(item.get("overall_impact"), dict):
-            industry_warnings[industry].append(W_INVALID_OVERALL)
+            item_warnings[industry].append(W_INVALID_OVERALL)
             continue
         overall, warnings = _validate_overall_impact(item["overall_impact"], allowed_refs)
-        industry_warnings[industry].extend(warnings)
+        item_warnings[industry].extend(warnings)
         valid_outputs[industry] = {
             "industry": industry,
             "category_impacts": category_impacts,
             "overall_impact": overall,
         }
 
-    missing = [industry for industry in requested_industries if industry not in seen]
+    missing = [name for name in requested_industries if name not in seen]
     if missing:
         batch_warnings.append(W_MISSING_INDUSTRY)
-        for industry in missing:
-            industry_warnings[industry].append(W_MISSING_INDUSTRY)
+        for name in missing:
+            item_warnings[name].append(W_MISSING_INDUSTRY)
 
     return (
         valid_outputs,
-        {industry: list(dict.fromkeys(warnings)) for industry, warnings in industry_warnings.items()},
+        {name: list(dict.fromkeys(warnings)) for name, warnings in item_warnings.items()},
         list(dict.fromkeys(batch_warnings)),
     )
 
@@ -441,7 +434,7 @@ Return this exact JSON shape:
   ]
 }}
 
-Do not rank industries, select industries, calculate scores, or copy the sector
+Do not rank, select, calculate scores, recommend securities, or copy the sector
 impact without industry-specific reasoning.
 """
 
@@ -460,8 +453,11 @@ Validation errors:
 Requested parent sector:
 {parent_sector}
 
-Requested industries:
+Requested industry names:
 {json.dumps(requested_industries, indent=2, sort_keys=True)}
+
+Required schema:
+{{"parent_sector": "...", "industries": [{{"industry": "...", "category_impacts": {{}}, "overall_impact": {{}}}}]}}
 
 Original structured response:
 {original_response}
@@ -479,9 +475,7 @@ class MacroIndustryImpactService:
         self.last_batches: Dict[str, List[List[str]]] = {}
 
     def _get_llm(self):
-        if self._llm is None:
-            self._llm = _LLMCaller()
-        return self._llm
+        return self._llm if self._llm is not None else _LLMCaller()
 
     def _llm_call(self, prompt: str) -> str:
         return self._get_llm().call(prompt)
@@ -511,20 +505,26 @@ class MacroIndustryImpactService:
                 by_horizon.setdefault(row.horizon, []).append(row.entity_name.strip())
         return by_horizon
 
-    def _load_industry_universe(self, run_id: str, parent_sector: str) -> List[str]:
-        rows = (
-            self._disc.query(GroupScore.entity_name)
-            .filter_by(run_id=run_id, entity_type=ENTITY_TYPE_INDUSTRY, parent_sector=parent_sector)
-            .all()
+    def _load_industry_universe(self, run_id: str, horizon: str | None = None, parent_sector: str | None = None) -> List[str]:
+        if parent_sector is None and horizon not in {"SHORT", "MID", "LONG"}:
+            parent_sector = horizon  # type: ignore[assignment]
+            horizon = None
+        query = self._disc.query(GroupScore.entity_name).filter_by(
+            run_id=run_id,
+            entity_type=ENTITY_TYPE_INDUSTRY,
+            parent_sector=parent_sector,
         )
+        if horizon is not None:
+            query = query.filter_by(horizon=horizon)
+        rows = query.all()
         industries = [row[0].strip() for row in rows if isinstance(row[0], str) and row[0].strip()]
         if not industries:
             industries = self._distinct_company_metric_industries(
-                CompanyTechnicalMetric.industry, CompanyTechnicalMetric.sector, run_id, parent_sector
+                CompanyFundamentalMetric.industry, CompanyFundamentalMetric.sector, run_id, parent_sector
             )
         if not industries:
             industries = self._distinct_company_metric_industries(
-                CompanyFundamentalMetric.industry, CompanyFundamentalMetric.sector, run_id, parent_sector
+                CompanyTechnicalMetric.industry, CompanyTechnicalMetric.sector, run_id, parent_sector
             )
         return sorted(set(industries))
 
@@ -537,68 +537,76 @@ class MacroIndustryImpactService:
         )
         return [row[0].strip() for row in rows if isinstance(row[0], str) and row[0].strip()]
 
-    def _sector_impact(self, run_id: str, sector: str) -> Optional[MacroEntityImpact]:
-        return (
-            self._disc.query(MacroEntityImpact)
-            .filter(
-                MacroEntityImpact.run_id == run_id,
-                MacroEntityImpact.entity_type == ENTITY_TYPE_SECTOR,
-                MacroEntityImpact.entity_name == sector,
-                MacroEntityImpact.parent_sector == "",
-                MacroEntityImpact.parent_industry == "",
-                MacroEntityImpact.status.in_(VALID_SECTOR_IMPACT_STATUSES),
-            )
-            .first()
+    def _sector_impact(self, run_id: str, horizon: str | None = None, sector: str | None = None) -> Optional[MacroEntityImpact]:
+        if sector is None and horizon not in {"SHORT", "MID", "LONG"}:
+            sector = horizon  # type: ignore[assignment]
+            horizon = None
+        query = self._disc.query(MacroEntityImpact).filter(
+            MacroEntityImpact.run_id == run_id,
+            MacroEntityImpact.entity_type == ENTITY_TYPE_SECTOR,
+            MacroEntityImpact.entity_name == sector,
+            MacroEntityImpact.parent_sector == "",
+            MacroEntityImpact.parent_industry == "",
+            MacroEntityImpact.status.in_(VALID_SECTOR_IMPACT_STATUSES),
         )
+        if horizon is not None:
+            query = query.filter(MacroEntityImpact.horizon == horizon)
+        return query.first()
 
     def _validate_or_repair_batch(
         self,
-        parent_sector: str,
+        sector: str,
         industries: List[str],
         raw_text: str,
         allowed_refs: Dict[str, set[str]],
     ) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, List[str]], List[str], bool]:
         parsed = _extract_json(raw_text)
-        outputs, industry_warnings, batch_warnings = _validate_batch_response(
-            parsed, parent_sector, industries, allowed_refs
+        outputs, item_warnings, batch_warnings = _validate_batch_response(
+            parsed, sector, industries, allowed_refs
         )
         structural_invalid = W_LLM_INVALID in batch_warnings or any(
             W_MISSING_INDUSTRY in warnings or W_INVALID_CATEGORY in warnings or W_INVALID_OVERALL in warnings
-            for warnings in industry_warnings.values()
+            for warnings in item_warnings.values()
         )
         if outputs.keys() == set(industries) and not structural_invalid:
-            return outputs, industry_warnings, batch_warnings, False
+            return outputs, item_warnings, batch_warnings, False
 
         errors = batch_warnings + [
             f"{industry}:{warning}"
-            for industry, warnings in industry_warnings.items()
+            for industry, warnings in item_warnings.items()
             for warning in warnings
         ]
         repaired_text = self._llm_call(
-            _build_repair_prompt(parent_sector, industries, errors, raw_text)
+            _build_repair_prompt(
+                sector,
+                industries,
+                errors,
+                raw_text,
+            )
         )
         repaired = _extract_json(repaired_text)
-        repaired_outputs, repaired_industry_warnings, repaired_batch_warnings = _validate_batch_response(
-            repaired, parent_sector, industries, allowed_refs
+        repaired_outputs, repaired_warnings, repaired_batch_warnings = _validate_batch_response(
+            repaired, sector, industries, allowed_refs
         )
         repaired_structural_invalid = W_LLM_INVALID in repaired_batch_warnings or any(
             W_MISSING_INDUSTRY in warnings or W_INVALID_CATEGORY in warnings or W_INVALID_OVERALL in warnings
-            for warnings in repaired_industry_warnings.values()
+            for warnings in repaired_warnings.values()
         )
         if repaired_outputs.keys() == set(industries) and not repaired_structural_invalid:
             merged = {
-                industry: list(dict.fromkeys(industry_warnings.get(industry, []) + repaired_industry_warnings.get(industry, [])))
-                for industry in industries
+                name: list(dict.fromkeys(item_warnings.get(name, []) + repaired_warnings.get(name, [])))
+                for name in industries
             }
             return repaired_outputs, merged, list(dict.fromkeys(batch_warnings + repaired_batch_warnings)), True
-        return {}, repaired_industry_warnings, list(dict.fromkeys(batch_warnings + repaired_batch_warnings + [W_LLM_INVALID])), True
+        return {}, repaired_warnings, list(dict.fromkeys(batch_warnings + repaired_batch_warnings + [W_LLM_INVALID])), True
 
-    def generate_industry_impacts(self, run_id: str) -> Dict[str, Any]:
+    def generate_industry_impacts(self, run_id: str, horizon: str | None = None) -> Dict[str, Any]:
         summary = self._latest_summary(run_id)
         if summary is None:
             return {"status": "FAILED", "warnings": [W_SUMMARY_UNAVAILABLE], "metadata": {}, "impact_ids": []}
 
-        selected_by_horizon = self._selected_sectors_by_horizon(run_id)
+        selected_map = self._selected_sectors_by_horizon(run_id)
+        selected_by_horizon = {horizon: selected_map.get(horizon, [])} if horizon is not None else selected_map
         self.last_selected_by_horizon = selected_by_horizon
         selected_rows_count = sum(len(items) for items in selected_by_horizon.values())
         unique_sectors = sorted({sector for sectors in selected_by_horizon.values() for sector in sectors})
@@ -614,12 +622,13 @@ class MacroIndustryImpactService:
         llm_call_count = 0
         processed_sectors = 0
 
+        batch_args_list = []
         for sector in unique_sectors:
-            sector_impact = self._sector_impact(run_id, sector)
+            sector_impact = self._sector_impact(run_id, horizon, sector)
             if sector_impact is None:
                 global_warnings.append(f"{W_SECTOR_IMPACT_UNAVAILABLE}:{sector}")
                 continue
-            industries = self._load_industry_universe(run_id, sector)
+            industries = self._load_industry_universe(run_id, horizon, sector)
             self.last_industry_universe[sector] = industries
             if not industries:
                 global_warnings.append(f"{W_INDUSTRY_UNIVERSE_UNAVAILABLE}:{sector}")
@@ -629,45 +638,56 @@ class MacroIndustryImpactService:
             sector_impacts[sector] = sector_impact
             self.last_batches[sector] = _batch(industries, MAX_INDUSTRIES_PER_BATCH)
             for industry_batch in self.last_batches[sector]:
-                raw = self._llm_call(
-                    _build_batch_prompt(
-                        sector,
-                        industry_batch,
-                        summary.category_summaries or {},
-                        summary.overall_synthesis or {},
-                        {
-                            "category_impacts": sector_impact.category_impacts,
-                            "overall_impact": sector_impact.overall_impact,
-                        },
-                        allowed_refs,
-                    )
-                )
-                llm_call_count += 1
-                batch_outputs, batch_warnings_by_industry, batch_warnings, repaired = self._validate_or_repair_batch(
-                    sector, industry_batch, raw, allowed_refs
-                )
-                if repaired:
-                    llm_call_count += 1
-                    global_warnings.append(W_LLM_INVALID)
-                global_warnings.extend(batch_warnings)
-                if batch_outputs:
-                    for industry, output in batch_outputs.items():
-                        key = (sector, industry)
-                        outputs[key] = output
-                        warnings_by_industry[key] = batch_warnings_by_industry.get(industry, [])
-                else:
-                    for industry in industry_batch:
-                        key = (sector, industry)
-                        fallback_keys.add(key)
-                        outputs[key] = _fallback_industry(industry)
-                        warnings_by_industry[key] = list(dict.fromkeys(batch_warnings_by_industry.get(industry, []) + [W_LLM_INVALID]))
+                batch_args_list.append((sector, sector_impact, industry_batch))
 
-        stale_count = self._cleanup_stale_impacts(run_id, set(outputs))
+        import concurrent.futures
+
+        def _process_industry_batch(args):
+            sector, sector_impact, industry_batch = args
+            raw = self._llm_call(
+                _build_batch_prompt(
+                    sector,
+                    industry_batch,
+                    summary.category_summaries or {},
+                    summary.overall_synthesis or {},
+                    {
+                        "category_impacts": sector_impact.category_impacts,
+                        "overall_impact": sector_impact.overall_impact,
+                    },
+                    allowed_refs,
+                )
+            )
+            return sector, industry_batch, self._validate_or_repair_batch(
+                sector, industry_batch, raw, allowed_refs
+            )
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            results = list(executor.map(_process_industry_batch, batch_args_list))
+
+        for sector, industry_batch, (batch_outputs, batch_warnings_by_industry, batch_warnings, repaired) in results:
+            llm_call_count += (2 if repaired else 1)
+            if repaired:
+                global_warnings.append(W_LLM_INVALID)
+            global_warnings.extend(batch_warnings)
+            if batch_outputs:
+                for industry, output in batch_outputs.items():
+                    key = (sector, industry)
+                    outputs[key] = output
+                    warnings_by_industry[key] = batch_warnings_by_industry.get(industry, [])
+            else:
+                for industry in industry_batch:
+                    key = (sector, industry)
+                    fallback_keys.add(key)
+                    outputs[key] = _fallback_industry(industry)
+                    warnings_by_industry[key] = list(dict.fromkeys(batch_warnings_by_industry.get(industry, []) + [W_LLM_INVALID]))
+
+        stale_count = self._cleanup_stale_impacts(run_id, horizon, set(outputs))
         impact_ids: List[str] = []
         for (sector, industry), output in sorted(outputs.items()):
             impact_ids.append(
                 self._persist_industry_impact(
                     run_id=run_id,
+                    horizon=horizon,
                     source_summary_id=summary.id,
                     parent_impact=sector_impacts[sector],
                     parent_sector=sector,
@@ -700,6 +720,7 @@ class MacroIndustryImpactService:
     def _persist_industry_impact(
         self,
         run_id: str,
+        horizon: str | None,
         source_summary_id: str,
         parent_impact: MacroEntityImpact,
         parent_sector: str,
@@ -708,11 +729,13 @@ class MacroIndustryImpactService:
         warnings: List[str],
         status: str,
     ) -> str:
+        horizon_key = horizon or ""
         overall = output["overall_impact"]
         row = (
             self._disc.query(MacroEntityImpact)
             .filter_by(
                 run_id=run_id,
+                horizon=horizon_key,
                 entity_type=ENTITY_TYPE_INDUSTRY,
                 entity_name=industry,
                 parent_sector=parent_sector,
@@ -725,6 +748,7 @@ class MacroIndustryImpactService:
             row = MacroEntityImpact(
                 id=str(uuid.uuid4()),
                 run_id=run_id,
+                horizon=horizon_key,
                 entity_type=ENTITY_TYPE_INDUSTRY,
                 entity_name=industry,
                 parent_sector=parent_sector,
@@ -748,12 +772,18 @@ class MacroIndustryImpactService:
         row.updated_at = now
         return row.id
 
-    def _cleanup_stale_impacts(self, run_id: str, current_keys: set[Tuple[str, str]]) -> int:
-        rows = (
-            self._disc.query(MacroEntityImpact)
-            .filter_by(run_id=run_id, entity_type=ENTITY_TYPE_INDUSTRY)
-            .all()
+    def _cleanup_stale_impacts(
+        self,
+        run_id: str,
+        horizon: str | None,
+        current_keys: set[Tuple[str, str]],
+    ) -> int:
+        query = self._disc.query(MacroEntityImpact).filter_by(
+            run_id=run_id,
+            entity_type=ENTITY_TYPE_INDUSTRY,
+            horizon=horizon or "",
         )
+        rows = query.all()
         stale = [
             row for row in rows
             if (row.parent_sector or "", row.entity_name or "") not in current_keys

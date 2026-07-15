@@ -211,13 +211,11 @@ class MacroSectorScoreService:
     def __init__(self, discovery_session: Session):
         self._disc = discovery_session
 
-    def calculate_sector_scores(self, run_id: str) -> Dict[str, int]:
-        impacts = (
-            self._disc.query(MacroEntityImpact)
-            .filter_by(run_id=run_id, entity_type="SECTOR")
-            .order_by(MacroEntityImpact.entity_name.asc())
-            .all()
-        )
+    def calculate_sector_scores(self, run_id: str, horizon: str | None = None) -> Dict[str, int]:
+        impact_query = self._disc.query(MacroEntityImpact).filter_by(run_id=run_id, entity_type="SECTOR")
+        if horizon is not None:
+            impact_query = impact_query.filter_by(horizon=horizon)
+        impacts = impact_query.order_by(MacroEntityImpact.horizon.asc(), MacroEntityImpact.entity_name.asc()).all()
 
         metadata = {
             "sector_count": len(impacts),
@@ -232,20 +230,20 @@ class MacroSectorScoreService:
             "negative_count": 0,
             "very_negative_count": 0,
             "overall_conflict_count": 0,
+            "stale_score_count": 0,
         }
 
         for impact_row in impacts:
-            groups = (
-                self._disc.query(GroupScore)
-                .filter_by(
-                    run_id=run_id,
-                    entity_type="SECTOR",
-                    entity_name=impact_row.entity_name,
-                    parent_sector="",
-                    parent_industry="",
-                )
-                .all()
+            group_query = self._disc.query(GroupScore).filter_by(
+                run_id=run_id,
+                entity_type="SECTOR",
+                entity_name=impact_row.entity_name,
+                parent_sector="",
+                parent_industry="",
             )
+            if horizon is not None:
+                group_query = group_query.filter_by(horizon=impact_row.horizon)
+            groups = group_query.all()
             if not groups:
                 continue
 
@@ -268,6 +266,15 @@ class MacroSectorScoreService:
                 group.macro_score = score_details["score"]
                 group.warnings = sorted(existing_warnings)
                 group.calculation_details = calc
+
+        metadata["stale_score_count"] += self._cleanup_stale_scores(
+            run_id,
+            horizon,
+            {
+                (impact.parent_sector or "", impact.entity_name or "")
+                for impact in impacts
+            },
+        )
 
         self._disc.commit()
         return metadata
@@ -302,3 +309,32 @@ class MacroSectorScoreService:
             metadata[status_key] += 1
         if W_OVERALL_CONFLICT in warnings:
             metadata["overall_conflict_count"] += 1
+
+    def _cleanup_stale_scores(self, run_id: str, horizon: str | None, current_keys: set[tuple[str, str]]) -> int:
+        group_query = self._disc.query(GroupScore).filter_by(run_id=run_id, entity_type="SECTOR")
+        if horizon is not None:
+            group_query = group_query.filter_by(horizon=horizon)
+        groups = group_query.all()
+        stale_count = 0
+        for group in groups:
+            calc = copy.deepcopy(group.calculation_details or {})
+            macro = copy.deepcopy(calc.get("macro") or {})
+            if "sector_score" not in macro:
+                continue
+            key = (group.parent_sector or "", group.entity_name or "")
+            if key in current_keys:
+                continue
+            macro["sector_score"] = {
+                "available": False,
+                "eligible_for_selection": False,
+                "status": "UNAVAILABLE",
+                "reason": W_UNAVAILABLE,
+            }
+            calc["macro"] = macro
+            warnings = set(group.warnings or [])
+            warnings.add(W_UNAVAILABLE)
+            group.macro_score = None
+            group.warnings = sorted(warnings)
+            group.calculation_details = calc
+            stale_count += 1
+        return stale_count

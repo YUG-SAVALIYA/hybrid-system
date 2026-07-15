@@ -27,7 +27,13 @@ class TechnicalBasicIndustryAggregationService:
     def __init__(self, discovery_session: Session):
         self._disc = discovery_session
 
-    def aggregate_basic_industries(self, run_id: str, horizon: str) -> None:
+    def aggregate_basic_industries(
+        self,
+        run_id: str,
+        horizon: str,
+        parent_sector: str | None = None,
+        parent_industry: str | None = None,
+    ) -> None:
         records = self._disc.execute(
             text("""
                 SELECT 
@@ -50,6 +56,10 @@ class TechnicalBasicIndustryAggregationService:
             ind = (r.industry or "").strip()
             bind = (r.basic_industry or "").strip()
             if not sec or not ind or not bind:
+                continue
+            if parent_sector is not None and sec != parent_sector:
+                continue
+            if parent_industry is not None and ind != parent_industry:
                 continue
             key = (sec, ind, bind)
             if key not in groups_map:

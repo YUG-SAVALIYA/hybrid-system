@@ -13,6 +13,9 @@ from models.discovery import (
     DiscoverySelection,
     GroupScore,
     StockCandidateSnapshot,
+    EligibleUniverseSnapshot,
+    CompanyTechnicalMetric,
+    CompanyFundamentalMetric,
 )
 
 
@@ -30,27 +33,42 @@ W_DUPLICATE_SELECTION = "DUPLICATE_ACTIVE_SELECTION"
 
 DISPLAY_STAGE_BY_HORIZON = {
     "SHORT": (
+        "SECTOR_SELECTION",
+        "INDUSTRY_SELECTION",
+        "BASIC_INDUSTRY_SELECTION",
+        "STOCK_SELECTION",
+    ),
+    "MID": (
+        "SECTOR_SELECTION",
+        "INDUSTRY_SELECTION",
+        "BASIC_INDUSTRY_SELECTION",
+        "STOCK_SELECTION",
+    ),
+    "LONG": (
+        "SECTOR_SELECTION",
+        "INDUSTRY_SELECTION",
+        "BASIC_INDUSTRY_SELECTION",
+        "STOCK_SELECTION",
+    ),
+}
+
+LEGACY_DISPLAY_STAGE_BY_HORIZON = {
+    "SHORT": (
         "SECTOR_RANKING",
         "INDUSTRY_RANKING",
         "BASIC_INDUSTRY_RANKING",
-        "STOCK_CANDIDATE_UNIVERSE",
-        "STOCK_CANDIDATE_SCORE",
         "STOCK_RANKING",
     ),
     "MID": (
         "SECTOR_RANKING",
         "INDUSTRY_RANKING",
         "BASIC_INDUSTRY_RANKING",
-        "STOCK_CANDIDATE_UNIVERSE",
-        "STOCK_CANDIDATE_SCORE",
         "STOCK_RANKING",
     ),
     "LONG": (
         "SECTOR_RANKING",
         "INDUSTRY_RANKING",
         "BASIC_INDUSTRY_RANKING",
-        "STOCK_CANDIDATE_UNIVERSE",
-        "STOCK_CANDIDATE_SCORE",
         "STOCK_RANKING",
     ),
 }
@@ -126,7 +144,7 @@ class DiscoveryResultService:
             self._disc.query(DiscoverySelection)
             .filter(
                 DiscoverySelection.run_id == run_id,
-                DiscoverySelection.selected.is_(True),
+                DiscoverySelection.selected == True,
             )
             .order_by(
                 DiscoverySelection.horizon.asc(),
@@ -218,88 +236,58 @@ class DiscoveryResultService:
         warnings: List[str] = []
         status = self._horizon_status(run.stage_results or {}, horizon)
 
-        sector_selection, sector_warnings = self._single_selection(
-            selections.get(ENTITY_SECTOR, [])
-        )
-        warnings.extend(sector_warnings)
-        sector = None
-        if sector_selection is not None:
-            sector = self._group_payload(
-                horizon,
-                ENTITY_SECTOR,
-                sector_selection,
-                group_scores,
-                warnings,
-            )
+        sector_selections = selections.get(ENTITY_SECTOR, [])
+        sectors = []
+        for sel in sector_selections:
+            payload = self._group_payload(horizon, ENTITY_SECTOR, sel, group_scores, warnings)
+            if payload:
+                sectors.append(payload)
 
-        industry_selection, industry_warnings = self._single_selection(
-            selections.get(ENTITY_INDUSTRY, [])
-        )
-        warnings.extend(industry_warnings)
-        industry = None
-        if industry_selection is not None and sector_selection is not None:
-            if (industry_selection.parent_sector or "") != sector_selection.entity_name:
-                warnings.append(W_HIERARCHY_MISMATCH)
+        industry_selections = selections.get(ENTITY_INDUSTRY, [])
+        industries = []
+        for sel in industry_selections:
+            if any((sel.parent_sector or "") == s_sel.entity_name for s_sel in sector_selections):
+                payload = self._group_payload(horizon, ENTITY_INDUSTRY, sel, group_scores, warnings)
+                if payload:
+                    industries.append(payload)
             else:
-                industry = self._group_payload(
-                    horizon,
-                    ENTITY_INDUSTRY,
-                    industry_selection,
-                    group_scores,
-                    warnings,
-                )
-        elif industry_selection is not None:
-            warnings.append(W_HIERARCHY_MISMATCH)
+                warnings.append(W_HIERARCHY_MISMATCH)
 
-        basic_selection, basic_warnings = self._single_selection(
-            selections.get(ENTITY_BASIC_INDUSTRY, [])
-        )
-        warnings.extend(basic_warnings)
-        basic_industry = None
-        if basic_selection is not None and sector_selection is not None and industry_selection is not None and industry is not None:
-            if (
-                (basic_selection.parent_sector or "") != sector_selection.entity_name
-                or (basic_selection.parent_industry or "") != industry_selection.entity_name
-            ):
-                warnings.append(W_HIERARCHY_MISMATCH)
+        basic_selections = selections.get(ENTITY_BASIC_INDUSTRY, [])
+        basic_industries = []
+        for sel in basic_selections:
+            if any((sel.parent_industry or "") == i_sel.entity_name for i_sel in industry_selections):
+                payload = self._group_payload(horizon, ENTITY_BASIC_INDUSTRY, sel, group_scores, warnings)
+                if payload:
+                    basic_industries.append(payload)
             else:
-                basic_industry = self._group_payload(
-                    horizon,
-                    ENTITY_BASIC_INDUSTRY,
-                    basic_selection,
-                    group_scores,
-                    warnings,
-                )
-        elif basic_selection is not None:
-            warnings.append(W_HIERARCHY_MISMATCH)
+                warnings.append(W_HIERARCHY_MISMATCH)
 
         stocks: List[Dict[str, Any]] = []
-        if sector_selection is not None and industry is not None and basic_industry is not None:
-            stock_rows = sorted(
-                selections.get(ENTITY_STOCK, []),
-                key=lambda row: (
-                    row.rank if row.rank is not None else 10**9,
-                    row.symbol or row.entity_name or "",
-                ),
-            )
-            for stock_selection in stock_rows:
-                if not self._stock_matches(stock_selection, sector_selection, industry_selection, basic_selection):
-                    warnings.append(W_HIERARCHY_MISMATCH)
-                    continue
+        stock_rows = sorted(
+            selections.get(ENTITY_STOCK, []),
+            key=lambda row: (
+                row.rank if row.rank is not None else 10**9,
+                row.symbol or row.entity_name or "",
+            ),
+        )
+        for stock_selection in stock_rows:
+            # Note: We just check if it matches ANY selected basic industry
+            if any((stock_selection.basic_industry or "") == b_sel.entity_name for b_sel in basic_selections):
                 snapshot = stock_snapshots.get((horizon, stock_selection.company_id or ""))
                 if snapshot is None:
                     warnings.append(W_STOCK_SNAPSHOT_UNAVAILABLE)
                     continue
                 stocks.append(self._stock_payload(stock_selection, snapshot))
-        elif selections.get(ENTITY_STOCK):
-            warnings.append(W_HIERARCHY_MISMATCH)
+            else:
+                warnings.append(W_HIERARCHY_MISMATCH)
 
         return (
             {
                 "status": status,
-                "sector": sector,
-                "industry": industry,
-                "basic_industry": basic_industry,
+                "sectors": sectors,
+                "industries": industries,
+                "basic_industries": basic_industries,
                 "stocks": stocks,
                 "warnings": _clean_warnings(warnings),
             },
@@ -396,7 +384,9 @@ class DiscoveryResultService:
     def _horizon_status(self, stage_results: Dict[str, Any], horizon: str) -> str:
         status = "PENDING"
         saw_failed = False
-        for stage in DISPLAY_STAGE_BY_HORIZON[horizon]:
+        stages = DISPLAY_STAGE_BY_HORIZON[horizon]
+        legacy_stages = LEGACY_DISPLAY_STAGE_BY_HORIZON[horizon]
+        for stage in stages:
             result = stage_results.get(stage) or {}
             horizon_result = (result.get("horizons") or {}).get(horizon)
             candidate = None
@@ -408,6 +398,19 @@ class DiscoveryResultService:
                 saw_failed = True
             if candidate:
                 status = candidate
+        if status == "PENDING":
+            for stage in legacy_stages:
+                result = stage_results.get(stage) or {}
+                horizon_result = (result.get("horizons") or {}).get(horizon)
+                candidate = None
+                if isinstance(horizon_result, dict):
+                    candidate = horizon_result.get("status")
+                elif isinstance(result, dict):
+                    candidate = result.get("status")
+                if candidate == "FAILED":
+                    saw_failed = True
+                if candidate:
+                    status = candidate
         if saw_failed:
             return "FAILED"
         return status
@@ -421,6 +424,68 @@ class DiscoveryResultService:
             "stocks": [],
             "warnings": _clean_warnings(warnings),
         }
+
+    def get_group_constituents(self, run_id: str, horizon: str, entity_type: str, entity_name: str, parent_sector: str = "", parent_industry: str = "") -> List[Dict[str, Any]]:
+        """Fetch all constituent companies for a specific group (Sector, Industry, Basic Industry)."""
+        query = self._disc.query(
+            EligibleUniverseSnapshot,
+            CompanyTechnicalMetric,
+            CompanyFundamentalMetric
+        ).join(
+            CompanyTechnicalMetric,
+            (EligibleUniverseSnapshot.source_company_id == CompanyTechnicalMetric.source_company_id) &
+            (EligibleUniverseSnapshot.run_id == CompanyTechnicalMetric.run_id) &
+            (CompanyTechnicalMetric.horizon == horizon),
+            isouter=True
+        ).join(
+            CompanyFundamentalMetric,
+            (EligibleUniverseSnapshot.source_company_id == CompanyFundamentalMetric.source_company_id) &
+            (EligibleUniverseSnapshot.run_id == CompanyFundamentalMetric.run_id),
+            isouter=True
+        ).filter(
+            EligibleUniverseSnapshot.run_id == run_id,
+            EligibleUniverseSnapshot.horizon == horizon
+        )
+
+        if entity_type == ENTITY_SECTOR:
+            query = query.filter(EligibleUniverseSnapshot.sector == entity_name)
+        elif entity_type == ENTITY_INDUSTRY:
+            query = query.filter(EligibleUniverseSnapshot.industry == entity_name)
+            if parent_sector:
+                query = query.filter(EligibleUniverseSnapshot.sector == parent_sector)
+        elif entity_type == ENTITY_BASIC_INDUSTRY:
+            query = query.filter(EligibleUniverseSnapshot.basic_industry == entity_name)
+            if parent_sector:
+                query = query.filter(EligibleUniverseSnapshot.sector == parent_sector)
+            if parent_industry:
+                query = query.filter(EligibleUniverseSnapshot.industry == parent_industry)
+        else:
+            return []
+
+        results = query.all()
+        constituents = []
+        for uni, tech, fund in results:
+            constituents.append({
+                "symbol": uni.symbol,
+                "name": uni.source_company_id, # Can map to name if available, but usually symbol is used
+                "sector": uni.sector,
+                "industry": uni.industry,
+                "basic_industry": uni.basic_industry,
+                "technical_score": tech.final_technical_score if tech else None,
+                "technical_status": tech.technical_status if tech else None,
+                "company_return": tech.company_return if tech else None,
+                "benchmark_return": tech.benchmark_return if tech else None,
+                "tech_details": tech.calculation_details if tech else None,
+                "fundamental_score": fund.final_fundamental_score if fund else None,
+                "fundamental_status": fund.fundamental_status if fund else None,
+                "fund_details": fund.calculation_details if fund else None,
+                "market_cap": uni.market_cap
+            })
+
+        # Sort by market cap descending or symbol
+        constituents.sort(key=lambda x: (x["market_cap"] or 0), reverse=True)
+        return constituents
+
 
 
 def _final_discovery_details(entity_type: str, calculation_details: Any) -> Dict[str, Any]:

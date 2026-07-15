@@ -78,6 +78,8 @@ def _nested_get(data: Any, path: Tuple[str, ...]) -> Any:
 
 
 def _technical_score_from(metric: CompanyTechnicalMetric) -> Optional[float]:
+    if _is_finite(metric.final_technical_score):
+        return float(metric.final_technical_score)
     calc = metric.calculation_details or {}
     for path in (
         ("technical_score",),

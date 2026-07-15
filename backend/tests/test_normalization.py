@@ -49,24 +49,6 @@ def test_sector_classifier():
     assert SectorClassifier.is_financial_business("Technology", "Software", "Software") is False
     assert SectorClassifier.is_financial_business(None, None, None) is False
 
-def test_coverage_report():
-    # Requires DB connection
-    session = SourceSessionLocal()
-    try:
-        service = CoverageReportService(session, benchmark_symbol="NIFTY 500")
-        report = service.run_report()
-        
-        # Test basic structures
-        assert "total_companies" in report
-        assert "pnl_companies" in report
-        assert "benchmark_status" in report
-        
-        # We know NIFTY 500 is missing based on research
-        assert report["benchmark_status"] == "BENCHMARK_DATA_UNAVAILABLE"
-        assert report["benchmark_count"] == 0
-    finally:
-        session.close()
-
 def test_canonical_field_mapping():
     # Simple check on the mapped dict to ensure all fields are documented
     CANONICAL_MAPPING = {

@@ -29,7 +29,12 @@ class TechnicalIndustryScoreService:
     def __init__(self, discovery_session: Session):
         self._disc = discovery_session
 
-    def calculate_industry_scores(self, run_id: str, horizon: str) -> None:
+    def calculate_industry_scores(
+        self,
+        run_id: str,
+        horizon: str,
+        parent_sector: str | None = None,
+    ) -> None:
         records = self._disc.execute(
             text("""
                 SELECT 
@@ -37,8 +42,9 @@ class TechnicalIndustryScoreService:
                     warnings, calculation_details
                 FROM group_scores
                 WHERE run_id = :r AND horizon = :h AND entity_type = 'INDUSTRY'
+                  AND (:parent_sector IS NULL OR parent_sector = :parent_sector)
             """),
-            {"r": run_id, "h": horizon}
+            {"r": run_id, "h": horizon, "parent_sector": parent_sector}
         ).fetchall()
 
         if not records:

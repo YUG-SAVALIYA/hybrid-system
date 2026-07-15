@@ -2,7 +2,7 @@
 TechnicalDateAlignmentService
 
 Aligns company candles in the source database with the imported
-NIFTY 500 benchmark candles in the discovery database.
+NIFTY500 benchmark candles in the discovery database.
 
 Does NOT calculate any returns, volumes, or scores.
 """
@@ -54,14 +54,14 @@ class AlignmentResult:
 
 class TechnicalDateAlignmentService:
     """
-    Aligns company candles to the NIFTY 500 benchmark trading dates.
+    Aligns company candles to the NIFTY500 benchmark trading dates.
 
     Parameters
     ----------
     source_session  : read-only SQLAlchemy session connected to source DB.
     discovery_session : read-write SQLAlchemy session connected to discovery DB.
     benchmark_code  : benchmark identifier stored in benchmark_candles table.
-                      Defaults to config.PRIMARY_TECHNICAL_BENCHMARK ("NIFTY_500").
+                      Defaults to config.PRIMARY_TECHNICAL_BENCHMARK ("NIFTY500").
     max_staleness   : maximum allowed session lag before a company is marked unavailable.
                       Defaults to config.MAX_COMPANY_CANDLE_STALENESS_SESSIONS.
     """
@@ -205,20 +205,21 @@ class TechnicalDateAlignmentService:
         if not symbols:
             return {}
 
-        # Pass symbol list as a parameter-safe array.
+        as_of_str = as_of.isoformat()[:10] + "T23:59:59"
+
         result = self._src.execute(
             text("""
                 SELECT symbol,
-                       MAX(DATE(datetime)) AS latest_date
+                       MAX(SUBSTRING(datetime FROM 1 FOR 10)) AS latest_date
                 FROM market_candles_cleaned
                 WHERE symbol = ANY(:syms)
-                  AND DATE(datetime) <= :as_of
+                  AND datetime <= :as_of
                 GROUP BY symbol
             """),
-            {"syms": symbols, "as_of": as_of},
+            {"syms": symbols, "as_of": as_of_str},
         ).fetchall()
 
-        return {r.symbol.strip(): r.latest_date for r in result}
+        return {r.symbol.strip(): date.fromisoformat(r.latest_date) for r in result if r.latest_date}
 
     def _align_company(
         self,

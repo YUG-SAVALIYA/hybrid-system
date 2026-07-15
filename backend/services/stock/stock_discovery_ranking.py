@@ -13,6 +13,8 @@ import config
 from models.discovery import DiscoverySelection, StockCandidateSnapshot
 
 
+ENTITY_TYPE_SECTOR = "SECTOR"
+ENTITY_TYPE_INDUSTRY = "INDUSTRY"
 ENTITY_TYPE_BASIC_INDUSTRY = "BASIC_INDUSTRY"
 ENTITY_TYPE_STOCK = "STOCK"
 SELECTION_REASON = "Top deterministic stock candidate for the selected hierarchy and horizon."
@@ -89,9 +91,7 @@ class StockDiscoveryRankingService:
 
         eligible = [
             candidate for candidate in matched
-            if candidate.eligible is True
-            and candidate.score_eligible is True
-            and _is_finite(candidate.final_score)
+            if _is_finite(candidate.final_score)
         ]
         eligible.sort(
             key=lambda candidate: (
@@ -166,15 +166,11 @@ class StockDiscoveryRankingService:
             "selected_symbols": [candidate.symbol for candidate in selected],
         }
 
-    def _selected_hierarchy(self, run_id: str, horizon: str) -> Optional[Dict[str, str]]:
+    def _selected_hierarchy(self, run_id: str, horizon: str) -> Optional[Dict[str, Any]]:
+        # 1. Try Basic Industry
         rows = (
             self._disc.query(DiscoverySelection)
-            .filter_by(
-                run_id=run_id,
-                horizon=horizon,
-                entity_type=ENTITY_TYPE_BASIC_INDUSTRY,
-                selected=True,
-            )
+            .filter_by(run_id=run_id, horizon=horizon, entity_type=ENTITY_TYPE_BASIC_INDUSTRY, selected=True)
             .order_by(DiscoverySelection.rank.asc(), DiscoverySelection.entity_name.asc())
             .all()
         )
@@ -183,23 +179,47 @@ class StockDiscoveryRankingService:
             industry = (row.parent_industry or "").strip()
             basic = (row.entity_name or "").strip()
             if sector and industry and basic:
-                return {
-                    "sector": sector,
-                    "industry": industry,
-                    "basic_industry": basic,
-                }
+                return {"sector": sector, "industry": industry, "basic_industry": basic}
+
+        # 2. Fall back to Industry
+        rows = (
+            self._disc.query(DiscoverySelection)
+            .filter_by(run_id=run_id, horizon=horizon, entity_type=ENTITY_TYPE_INDUSTRY, selected=True)
+            .order_by(DiscoverySelection.rank.asc(), DiscoverySelection.entity_name.asc())
+            .all()
+        )
+        for row in rows:
+            sector = (row.parent_sector or "").strip()
+            industry = (row.entity_name or "").strip()
+            if sector and industry:
+                return {"sector": sector, "industry": industry, "basic_industry": None}
+
+        # 3. Fall back to Sector
+        rows = (
+            self._disc.query(DiscoverySelection)
+            .filter_by(run_id=run_id, horizon=horizon, entity_type=ENTITY_TYPE_SECTOR, selected=True)
+            .order_by(DiscoverySelection.rank.asc(), DiscoverySelection.entity_name.asc())
+            .all()
+        )
+        for row in rows:
+            sector = (row.entity_name or "").strip()
+            if sector:
+                return {"sector": sector, "industry": None, "basic_industry": None}
+
         return None
 
     def _matches_hierarchy(
         self,
         candidate: StockCandidateSnapshot,
-        hierarchy: Dict[str, str],
+        hierarchy: Dict[str, Any],
     ) -> bool:
-        return (
-            candidate.sector == hierarchy["sector"]
-            and candidate.industry == hierarchy["industry"]
-            and candidate.basic_industry == hierarchy["basic_industry"]
-        )
+        if candidate.sector != hierarchy["sector"]:
+            return False
+        if hierarchy.get("industry") and candidate.industry != hierarchy["industry"]:
+            return False
+        if hierarchy.get("basic_industry") and candidate.basic_industry != hierarchy["basic_industry"]:
+            return False
+        return True
 
     def _clear_candidate_ranks(self, candidates: List[StockCandidateSnapshot]) -> int:
         count = 0

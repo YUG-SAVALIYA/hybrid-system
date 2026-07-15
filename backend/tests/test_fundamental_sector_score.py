@@ -7,7 +7,7 @@ from sqlalchemy import text
 
 from database import DiscoverySessionLocal
 from models.discovery import GroupScore
-from services.fundamental.fundamental_sector_score import FundamentalSectorScoreService
+from services.fundamental.fundamental_group_score import FundamentalGroupScoreService
 
 @pytest.fixture
 def disc_session():
@@ -123,8 +123,8 @@ def test_fundamental_sector_score_service(disc_session):
     
     disc_session.commit()
     
-    svc = FundamentalSectorScoreService(disc_session)
-    svc.calculate_final_scores(run_id)
+    svc = FundamentalGroupScoreService(disc_session)
+    svc.calculate_final_scores(run_id, entity_type="SECTOR")
     
     def get_f(name):
         g = disc_session.query(GroupScore).filter_by(entity_name=name).first()
@@ -193,6 +193,6 @@ def test_fundamental_sector_score_service(disc_session):
     assert "EXISTING_WARN" in g.warnings
     
     # 19
-    svc.calculate_final_scores(run_id)
+    svc.calculate_final_scores(run_id, entity_type="SECTOR")
     f_all2, _, _ = get_f("SEC_ALL")
     assert f_all2["score"] == 62.5

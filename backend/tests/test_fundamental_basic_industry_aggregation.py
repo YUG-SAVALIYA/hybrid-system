@@ -7,7 +7,7 @@ from sqlalchemy import text
 
 from database import DiscoverySessionLocal
 from models.discovery import CompanyFundamentalMetric, GroupScore
-from services.fundamental.fundamental_basic_industry_aggregation import FundamentalBasicIndustryAggregationService
+from services.fundamental.fundamental_group_aggregation import FundamentalGroupAggregationService
 
 @pytest.fixture
 def disc_session():
@@ -111,8 +111,8 @@ def test_fundamental_basic_industry_aggregation_service(disc_session):
     
     disc_session.commit()
     
-    svc = FundamentalBasicIndustryAggregationService(disc_session)
-    svc.aggregate_basic_industries(run_id)
+    svc = FundamentalGroupAggregationService(disc_session)
+    svc.aggregate_groups(run_id, entity_type="BASIC_INDUSTRY")
     
     def get_g(sec, ind, bi):
         return disc_session.query(GroupScore).filter_by(parent_sector=sec, parent_industry=ind, entity_name=bi).first()
@@ -168,6 +168,6 @@ def test_fundamental_basic_industry_aggregation_service(disc_session):
     assert g_a.calculation_details["fundamental"]["other"] == "value"
     
     # 17
-    svc.aggregate_basic_industries(run_id)
+    svc.aggregate_groups(run_id, entity_type="BASIC_INDUSTRY")
     g_a2 = get_g("SecA", "IndA", "BI_Same")
     assert g_a2.calculation_details["fundamental"]["raw_aggregation"]["metrics"]["sales_growth_pct"]["median"] == 20.0

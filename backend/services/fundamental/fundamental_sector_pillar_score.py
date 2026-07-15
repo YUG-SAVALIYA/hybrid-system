@@ -106,8 +106,21 @@ class FundamentalSectorPillarScoreService:
     def __init__(self, discovery_session: Session):
         self._disc = discovery_session
 
-    def calculate_pillar_scores(self, run_id: str) -> None:
-        sectors = self._disc.query(GroupScore).filter_by(run_id=run_id, entity_type="SECTOR").all()
+    def calculate_pillar_scores(
+        self,
+        run_id: str,
+        horizon: str | None = None,
+        sectors: list[str] | None = None,
+    ) -> None:
+        query = self._disc.query(GroupScore).filter_by(
+            run_id=run_id,
+            entity_type="SECTOR",
+        )
+        if horizon is not None:
+            query = query.filter_by(horizon=horizon)
+        if sectors is not None:
+            query = query.filter(GroupScore.entity_name.in_(sectors))
+        sectors = query.all()
         if not sectors:
             return
 

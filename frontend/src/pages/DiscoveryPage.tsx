@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState, Fragment } from "react";
 import {
   createDiscoveryRun,
   DiscoveryApiError,
@@ -13,6 +13,23 @@ import {
   getDiscoveryResult,
   prepareDiscoveryRun,
 } from "../api/discovery";
+
+interface Constituent {
+  symbol: string;
+  name: string;
+  sector: string;
+  industry: string;
+  basic_industry: string;
+  technical_score: number | null;
+  technical_status: string | null;
+  company_return?: number | null;
+  benchmark_return?: number | null;
+  tech_details?: any;
+  fundamental_score: number | null;
+  fundamental_status: string | null;
+  fund_details?: any;
+  market_cap: number | null;
+}
 
 type FlowState =
   | "IDLE"
@@ -47,26 +64,17 @@ const HORIZONS: Array<{ key: DiscoveryHorizon; label: string }> = [
 
 const STAGES: Array<{ key: string; label: string; source: "preparation" | "execution" }> = [
   { key: "UNIVERSE_SNAPSHOT", label: "Universe Snapshot", source: "preparation" },
-  { key: "TECHNICAL_COMPANY", label: "Technical Company Analysis", source: "preparation" },
-  { key: "TECHNICAL_SECTOR", label: "Technical Sector Analysis", source: "preparation" },
-  { key: "TECHNICAL_INDUSTRY", label: "Technical Industry Analysis", source: "preparation" },
-  { key: "TECHNICAL_BASIC_INDUSTRY", label: "Technical Basic Industry Analysis", source: "preparation" },
-  { key: "FUNDAMENTAL_COMPANY", label: "Fundamental Company Analysis", source: "preparation" },
-  { key: "FUNDAMENTAL_SECTOR", label: "Fundamental Sector Analysis", source: "preparation" },
-  { key: "FUNDAMENTAL_INDUSTRY", label: "Fundamental Industry Analysis", source: "preparation" },
-  { key: "FUNDAMENTAL_BASIC_INDUSTRY", label: "Fundamental Basic Industry Analysis", source: "preparation" },
+  { key: "COMPANY_TECHNICAL", label: "Technical Analysis", source: "preparation" },
+  { key: "COMPANY_FUNDAMENTAL", label: "Fundamental Analysis", source: "preparation" },
+  { key: "UPSTREAM_VALIDATION", label: "Validation", source: "preparation" },
   { key: "MACRO_SEARCH", label: "Macro Search", source: "execution" },
   { key: "MACRO_FILTER", label: "Macro Filter", source: "execution" },
-  { key: "SECTOR_IMPACT", label: "Sector Macro Impact", source: "execution" },
-  { key: "SECTOR_RANKING", label: "Sector Ranking", source: "execution" },
-  { key: "INDUSTRY_IMPACT", label: "Industry Macro Impact", source: "execution" },
-  { key: "INDUSTRY_RANKING", label: "Industry Ranking", source: "execution" },
-  { key: "BASIC_INDUSTRY_IMPACT", label: "Basic Industry Macro Impact", source: "execution" },
-  { key: "BASIC_INDUSTRY_RANKING", label: "Basic Industry Ranking", source: "execution" },
-  { key: "STOCK_CANDIDATE_UNIVERSE", label: "Stock Candidate Universe", source: "execution" },
-  { key: "STOCK_CANDIDATE_SCORE", label: "Stock Candidate Scoring", source: "execution" },
-  { key: "STOCK_RANKING", label: "Stock Ranking", source: "execution" },
+  { key: "SECTOR_SELECTION", label: "Find Best Sector", source: "execution" },
+  { key: "INDUSTRY_SELECTION", label: "Find Best Industry", source: "execution" },
+  { key: "BASIC_INDUSTRY_SELECTION", label: "Find Best Basic Industry", source: "execution" },
+  { key: "STOCK_SELECTION", label: "Find Best Stocks", source: "execution" },
 ];
+
 
 const RUN_ID_PATTERN = /^[A-Za-z0-9_-]{0,128}$/;
 
@@ -129,8 +137,13 @@ function finiteScore(value?: number | null) {
   return typeof value === "number" && Number.isFinite(value);
 }
 
-function scoreText(value?: number | null) {
-  return finiteScore(value) ? Number(value).toFixed(1) : "-";
+function scoreText(score?: number | null) {
+  if (!finiteScore(score)) return <span className="score-null">-</span>;
+  const val = score!;
+  let className = "score-mid";
+  if (val >= 70) className = "score-high";
+  else if (val < 40) className = "score-low";
+  return <span className={className}>{val.toFixed(1)}</span>;
 }
 
 function stageStatus(stage?: DiscoveryStageResult): DiscoveryStageStatus {
@@ -164,24 +177,41 @@ function collectStageWarnings(
   });
   HORIZONS.forEach(({ key }) => {
     const horizon = result?.horizons[key];
-    horizon?.warnings.forEach((code) => add(code, key));
-    horizon?.sector?.warnings?.forEach((code) => add(code, `${key} Sector`));
-    horizon?.industry?.warnings?.forEach((code) => add(code, `${key} Industry`));
-    horizon?.basic_industry?.warnings?.forEach((code) => add(code, `${key} Basic Industry`));
-    horizon?.stocks.forEach((stock) =>
-      stock.warnings?.forEach((code) => add(code, `${key} ${stock.symbol}`))
+    horizon?.warnings?.forEach((code: string) => add(code, key));
+    horizon?.sectors?.forEach((g: DiscoveryGroupResult) => g.warnings?.forEach((code: string) => add(code, `${key} Sector`)));
+    horizon?.industries?.forEach((g: DiscoveryGroupResult) => g.warnings?.forEach((code: string) => add(code, `${key} Industry`)));
+    horizon?.basic_industries?.forEach((g: DiscoveryGroupResult) => g.warnings?.forEach((code: string) => add(code, `${key} Basic Industry`)));
+    horizon?.stocks.forEach((stock: DiscoveryStockResult) =>
+      stock.warnings?.forEach((code: string) => add(code, `${key} ${stock.symbol}`))
     );
   });
   return items;
 }
 
-function groupEmptyMessage(horizon: DiscoveryHorizon, result: DiscoveryResult | null) {
+type HorizonView = {
+  sectors: DiscoveryGroupResult[];
+  industries: DiscoveryGroupResult[];
+  basicIndustries: DiscoveryGroupResult[];
+  stocks: DiscoveryStockResult[];
+  warnings: string[];
+};
+
+function buildHorizonView(result: DiscoveryResult | null, key: DiscoveryHorizon): HorizonView {
+  const horizon = result?.horizons[key];
+  const view: HorizonView = { sectors: [], industries: [], basicIndustries: [], stocks: [], warnings: [] };
+  if (!horizon) return view;
+  
+  view.sectors = horizon.sectors || [];
+  view.industries = horizon.industries || [];
+  view.basicIndustries = horizon.basic_industries || [];
+  view.stocks = horizon.stocks || [];
+  view.warnings = horizon.warnings || [];
+  return view;
+}
+
+function groupEmptyMessage(horizon: DiscoveryHorizon, result: DiscoveryResult | null, view: HorizonView) {
   const data = result?.horizons[horizon];
-  if (!data || data.status === "PENDING") return "This horizon has not been processed yet.";
-  if (!data.sector) return "No eligible sector was found for this horizon.";
-  if (!data.industry) return "No eligible industry was found.";
-  if (!data.basic_industry) return "No eligible basic industry was found.";
-  if (!data.stocks.length) return "No eligible stock candidates were found.";
+  if (!data || data.status === "PENDING") return "Sector selection has not completed for this horizon.";
   return null;
 }
 
@@ -210,7 +240,7 @@ function buildProcessLog(
     items.push({
       id: stage.key,
       label: stage.label,
-      status,
+      status: status.toLowerCase(),
       source: stage.source === "preparation" ? "Preparation" : "Discovery execution",
       timestamp: stageResult?.completed_at || stageResult?.started_at || null,
       detail: stageResult?.error_message || stageResult?.warnings?.join(", ") || null,
@@ -219,7 +249,7 @@ function buildProcessLog(
       items.push({
         id: `${stage.key}-${horizon}`,
         label: `${stage.label} - ${horizon}`,
-        status: stageStatus(horizonResult),
+        status: stageStatus(horizonResult).toLowerCase(),
         source: "Horizon",
         timestamp: horizonResult?.completed_at || horizonResult?.started_at || null,
         detail: horizonResult?.error_message || horizonResult?.warnings?.join(", ") || null,
@@ -232,15 +262,19 @@ function buildProcessLog(
 
 export function DiscoveryPage() {
   const [flowState, setFlowState] = useState<FlowState>("IDLE");
-  const [asOfDate, setAsOfDate] = useState(todayIso());
   const [customRunId, setCustomRunId] = useState("");
   const [existingRunId, setExistingRunId] = useState("");
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [resumeExisting, setResumeExisting] = useState(true);
-  const [forceRestartPreparation, setForceRestartPreparation] = useState(false);
-  const [forceRestartExecution, setForceRestartExecution] = useState(false);
+  const [forceRestartPreparation, setForceRestartPreparation] = useState<boolean>(false);
+  const [forceRestartExecution, setForceRestartExecution] = useState<boolean>(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  
+  const [selectedGroup, setSelectedGroup] = useState<{type: string, name: string, parentSector: string, parentIndustry: string} | null>(null);
+
   const [activeHorizon, setActiveHorizon] = useState<DiscoveryHorizon>("SHORT");
+  const [runHorizon, setRunHorizon] = useState<DiscoveryHorizon>("SHORT");
+  const [activeViewTab, setActiveViewTab] = useState<"SECTORS" | "INDUSTRIES" | "BASIC_INDUSTRIES" | "STOCKS">("SECTORS");
   const [result, setResult] = useState<DiscoveryResult | null>(null);
   const [preparationStages, setPreparationStages] = useState<Record<string, DiscoveryStageResult>>({});
   const [error, setError] = useState<DiscoveryApiError | null>(null);
@@ -263,8 +297,21 @@ export function DiscoveryPage() {
     () => buildProcessLog(flowState, activeRunId, preparationStages, result, error),
     [activeRunId, error, flowState, preparationStages, result]
   );
-  const selectedHorizon = result?.horizons[activeHorizon];
-  const emptyMessage = groupEmptyMessage(activeHorizon, result);
+  const selectedHorizonView = useMemo(() => buildHorizonView(result, activeHorizon), [activeHorizon, result]);
+  const emptyMessage = groupEmptyMessage(activeHorizon, result, selectedHorizonView);
+
+  // Log warnings and errors to console instead of displaying in UI
+  useEffect(() => {
+    if (safeError) console.error("Pipeline Error:", safeError);
+  }, [safeError]);
+
+  useEffect(() => {
+    warnings.forEach((w) => console.warn(`[WARNING] ${w.code} (${w.context}): ${w.message}`));
+  }, [warnings]);
+
+  useEffect(() => {
+    selectedHorizonView.warnings.forEach((w) => console.warn(`[HORIZON WARNING] ${w}`));
+  }, [selectedHorizonView.warnings]);
 
   const clearPolling = useCallback(() => {
     if (pollRef.current) {
@@ -316,7 +363,7 @@ export function DiscoveryPage() {
     try {
       setFlowState("CREATING_RUN");
       const created = await createDiscoveryRun(
-        { run_id: customRunId.trim() || null, as_of_date: asOfDate || null },
+        { run_id: customRunId.trim() || null, as_of_date: null },
         controller.signal
       );
       setActiveRunId(created.run_id);
@@ -337,7 +384,7 @@ export function DiscoveryPage() {
       setFlowState("EXECUTING_DISCOVERY");
       const execution = await executeDiscoveryRun(
         created.run_id,
-        { resume: resumeExisting, force_restart: forceRestartExecution },
+        { resume: resumeExisting, force_restart: forceRestartExecution, target_horizon: runHorizon },
         controller.signal
       );
       if (execution.error) {
@@ -402,6 +449,7 @@ export function DiscoveryPage() {
       const execution = await executeDiscoveryRun(activeRunId, {
         resume: resumeExisting,
         force_restart: forceRestartExecution,
+        target_horizon: runHorizon,
       });
       setError(execution.error || null);
       await loadResult(activeRunId);
@@ -464,13 +512,15 @@ export function DiscoveryPage() {
           {isBusy && <span className="spinner-label">Working...</span>}
           </div>
           <label>
-            As of Date
-            <input
-              type="date"
-              value={asOfDate}
-              max={todayIso()}
-              onChange={(event) => setAsOfDate(event.target.value)}
-            />
+            Target Horizon
+            <select
+              value={runHorizon}
+              onChange={(event) => setRunHorizon(event.target.value as DiscoveryHorizon)}
+            >
+              <option value="SHORT">SHORT</option>
+              <option value="MID">MID</option>
+              <option value="LONG">LONG</option>
+            </select>
           </label>
           <label>
             Custom Run ID
@@ -483,6 +533,7 @@ export function DiscoveryPage() {
             />
           </label>
           {!runIdValid && <p className="field-error">Use letters, numbers, hyphens, and underscores only.</p>}
+
           <button type="submit" disabled={isBusy || !runIdValid}>
             {isBusy ? "Discovery Running" : "Start Discovery"}
           </button>
@@ -543,60 +594,27 @@ export function DiscoveryPage() {
             <h2>Pipeline Progress</h2>
             {isPolling && <span className="spinner-label">Refreshing result...</span>}
           </div>
-          <ol className="timeline">
-            {STAGES.map((stage, index) => {
+          <ol className="timeline-compact">
+            {STAGES.map((stage) => {
               const source = stage.source === "preparation" ? preparationStages : result?.stage_results || {};
               const stageResult = source[stage.key];
               const status = stageStatus(stageResult);
+              
+              let title = stage.label;
+              if (status === "FAILED" && stageResult?.error_message) {
+                title += ` - Error: ${stageResult.error_message}`;
+              }
+              
               return (
-                <li className={`timeline-item stage-${status.toLowerCase()}`} key={stage.key}>
-                  <span className="stage-index">{index + 1}</span>
-                  <div>
-                    <div className="stage-row">
-                      <span>{stage.label}</span>
-                      <span className="badge">{status}</span>
-                    </div>
-                    {status === "RUNNING" && <span className="inline-spinner">Running</span>}
-                    {status === "FAILED" && stageResult?.error_message && (
-                      <p className="stage-error">{stageResult.error_message}</p>
-                    )}
-                  </div>
+                <li className={`compact-pill pill-${status.toLowerCase()}`} key={stage.key} title={title}>
+                  <span className="pill-dot"></span>
+                  <span className="pill-label">{stage.label}</span>
                 </li>
               );
             })}
           </ol>
         </section>
       </section>
-
-      <section className="panel process-log-panel" aria-label="Process log">
-        <div className="panel-title">
-          <h2>Process Log</h2>
-          <span className="muted">{processLog.length} events</span>
-        </div>
-        {processLog.length ? (
-          <ol className="process-log">
-            {processLog.map((entry) => (
-              <li key={entry.id}>
-                <div>
-                  <strong>{entry.label}</strong>
-                  <span>{entry.source}</span>
-                </div>
-                <span className={`badge stage-${entry.status.toLowerCase()}`}>{entry.status}</span>
-                <time>{entry.timestamp || "-"}</time>
-                {entry.detail && <p>{entry.detail}</p>}
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <p className="muted">No process events yet.</p>
-        )}
-      </section>
-
-      {safeError && (
-        <section className={`alert ${/NIFTY 500|Parallel\.ai/.test(safeError) ? "blocking" : ""}`} role="alert">
-          {safeError}
-        </section>
-      )}
 
       <section className="panel results-panel">
         <div className="panel-title">
@@ -617,110 +635,102 @@ export function DiscoveryPage() {
           </div>
         </div>
 
+        <div className="tabs" role="tablist" aria-label="Result Views" style={{ marginTop: '1rem', marginBottom: '1rem' }}>
+          <button role="tab" type="button" aria-selected={activeViewTab === "SECTORS"} className={activeViewTab === "SECTORS" ? "tab active" : "tab"} onClick={() => setActiveViewTab("SECTORS")}>Sectors</button>
+          <button role="tab" type="button" aria-selected={activeViewTab === "INDUSTRIES"} className={activeViewTab === "INDUSTRIES" ? "tab active" : "tab"} onClick={() => setActiveViewTab("INDUSTRIES")}>Industries</button>
+          <button role="tab" type="button" aria-selected={activeViewTab === "BASIC_INDUSTRIES"} className={activeViewTab === "BASIC_INDUSTRIES" ? "tab active" : "tab"} onClick={() => setActiveViewTab("BASIC_INDUSTRIES")}>Basic Industries</button>
+          <button role="tab" type="button" aria-selected={activeViewTab === "STOCKS"} className={activeViewTab === "STOCKS" ? "tab active" : "tab"} onClick={() => setActiveViewTab("STOCKS")}>Stocks</button>
+        </div>
+
         {emptyMessage ? (
           <div className="empty-state">{emptyMessage}</div>
         ) : (
           <div className="result-content">
-            <div className="hierarchy-grid">
-              <GroupCard title="Sector" group={selectedHorizon?.sector} />
-              <GroupCard title="Industry" group={selectedHorizon?.industry} />
-              <GroupCard title="Basic Industry" group={selectedHorizon?.basic_industry} />
-            </div>
-            <StocksTable stocks={selectedHorizon?.stocks || []} />
+            {activeViewTab === "SECTORS" && <GroupTable title="Sectors" groups={selectedHorizonView.sectors} onRowClick={(name, ps, pi) => setSelectedGroup({type: 'SECTOR', name, parentSector: ps, parentIndustry: pi})} />}
+            {activeViewTab === "INDUSTRIES" && <GroupTable title="Industries" groups={selectedHorizonView.industries} showParentSector={true} onRowClick={(name, ps, pi) => setSelectedGroup({type: 'INDUSTRY', name, parentSector: ps, parentIndustry: pi})} />}
+            {activeViewTab === "BASIC_INDUSTRIES" && <GroupTable title="Basic Industries" groups={selectedHorizonView.basicIndustries} showParentSector={true} showParentIndustry={true} onRowClick={(name, ps, pi) => setSelectedGroup({type: 'BASIC_INDUSTRY', name, parentSector: ps, parentIndustry: pi})} />}
+            {activeViewTab === "STOCKS" && <StocksTable stocks={selectedHorizonView.stocks} />}
           </div>
         )}
       </section>
 
-      <section className="side-grid">
-        <details className="panel warnings-panel" open>
-          <summary>Warnings and Errors</summary>
-          {warnings.length ? (
-            <ul className="warning-list">
-              {warnings.map((warning) => (
-                <li key={`${warning.code}-${warning.context}`}>
-                  <strong>{warning.code}</strong>
-                  <span>{warning.context}</span>
-                  <p>{warning.message}</p>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="muted">No warnings reported.</p>
-          )}
-        </details>
-
-        <section className="panel metadata-panel">
-          <h2>Run Metadata</h2>
-          <dl>
-            <Meta label="Run ID" value={activeRunId || result?.run_id} copyable />
-            <Meta label="Run Status" value={result?.status || flowState} />
-            <Meta label="As-of Date" value={result?.as_of_date || result?.source_data_as_of || asOfDate} />
-            <Meta label="Current Stage" value={result?.current_stage} />
-            <Meta label="Last Completed Stage" value={result?.last_completed_stage} />
-            <Meta label="Started At" value={result?.started_at} />
-            <Meta label="Completed At" value={result?.completed_at} />
-            <Meta label="Resume Count" value={result?.resume_count?.toString() || "0"} />
-          </dl>
-        </section>
-      </section>
+      {selectedGroup && activeRunId && (
+        <ConstituentsModal
+          runId={activeRunId}
+          horizon={activeHorizon}
+          entityType={selectedGroup.type}
+          entityName={selectedGroup.name}
+          parentSector={selectedGroup.parentSector}
+          parentIndustry={selectedGroup.parentIndustry}
+          onClose={() => setSelectedGroup(null)}
+        />
+      )}
     </main>
   );
 }
 
-function Meta({ label, value, copyable = false }: { label: string; value?: string | null; copyable?: boolean }) {
+function GroupTable({ 
+  title, 
+  groups,
+  showParentSector = false,
+  showParentIndustry = false,
+  onRowClick
+}: { 
+  title: string; 
+  groups: DiscoveryGroupResult[];
+  showParentSector?: boolean;
+  showParentIndustry?: boolean;
+  onRowClick?: (name: string, parentSector: string, parentIndustry: string) => void;
+}) {
+  if (!groups.length) return <div className="empty-state">No {title.toLowerCase()} found.</div>;
   return (
-    <div className="meta-row">
-      <dt>{label}</dt>
-      <dd>
-        <span>{value || "-"}</span>
-        {copyable && value && (
-          <button type="button" className="copy-button" onClick={() => void navigator.clipboard?.writeText(value)}>
-            Copy
-          </button>
-        )}
-      </dd>
-    </div>
-  );
-}
-
-function GroupCard({ title, group }: { title: string; group?: DiscoveryGroupResult | null }) {
-  if (!group) return null;
-  const score = finiteScore(group.final_score) ? Math.max(0, Math.min(100, group.final_score || 0)) : 0;
-  return (
-    <article className="result-card">
-      <div className="card-heading">
-        <h3>{title}</h3>
-        <span className="badge">{group.status || "-"}</span>
-      </div>
-      <h4>{group.name}</h4>
-      <div className="score-meter" aria-label={`${title} final score ${scoreText(group.final_score)}`}>
-        <span style={{ width: `${score}%` }} />
-      </div>
-      <div className="metric-grid">
-        <Metric label="Rank" value={group.rank?.toString()} />
-        <Metric label="Final score" value={scoreText(group.final_score)} />
-        <Metric label="Technical score" value={scoreText(group.technical_score)} />
-        <Metric label="Fundamental score" value={scoreText(group.fundamental_score)} />
-        <Metric label="Macro score" value={scoreText(group.macro_score)} />
-        <Metric label="Coverage" value={finiteScore(group.coverage_pct) ? `${group.coverage_pct?.toFixed(1)}%` : "-"} />
-        <Metric label="Parent sector" value={group.parent_sector || undefined} />
-        <Metric label="Parent industry" value={group.parent_industry || undefined} />
-      </div>
-      {!!group.warnings?.length && <p className="card-warning">{group.warnings.join(", ")}</p>}
-    </article>
-  );
-}
-
-function Metric({ label, value }: { label: string; value?: string }) {
-  return (
-    <div>
-      <span>{label}</span>
-      <strong>{value || "-"}</strong>
+    <div className="table-wrap">
+      <table>
+        <caption>{title}</caption>
+        <thead>
+          <tr>
+            <th>Rank</th>
+            <th>Name</th>
+            {showParentSector && <th>Parent Sector</th>}
+            {showParentIndustry && <th>Parent Industry</th>}
+            <th>Technical Score</th>
+            <th>Fundamental Score</th>
+            <th>Macro Score</th>
+            <th>Final Score</th>
+            <th>Constituents</th>
+            <th>Coverage</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {groups.map((group) => (
+            <tr 
+              key={`${group.rank}-${group.name}`}
+              onClick={() => onRowClick && onRowClick(group.name, group.parent_sector || '', group.parent_industry || '')}
+              style={onRowClick ? { cursor: 'pointer' } : {}}
+              className={onRowClick ? "clickable-row" : ""}
+            >
+              <td>{group.rank || "-"}</td>
+              <td>{group.name}</td>
+              {showParentSector && <td>{group.parent_sector || "-"}</td>}
+              {showParentIndustry && <td>{group.parent_industry || "-"}</td>}
+              <td>{scoreText(group.technical_score)}</td>
+              <td>{scoreText(group.fundamental_score)}</td>
+              <td>{scoreText(group.macro_score)}</td>
+              <td>{scoreText(group.final_score)}</td>
+              <td>{group.constituent_count || "-"}</td>
+              <td>{finiteScore(group.coverage_pct) ? `${group.coverage_pct?.toFixed(1)}%` : "-"}</td>
+              <td><span className={`badge ${group.status?.toLowerCase()}`}>{group.status || "-"}</span></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
 
 function StocksTable({ stocks }: { stocks: DiscoveryStockResult[] }) {
+  if (!stocks.length) return <div className="empty-state">No stocks found.</div>;
   const sorted = [...stocks].sort((a, b) => (a.rank || 9999) - (b.rank || 9999));
   return (
     <div className="table-wrap">
@@ -748,11 +758,194 @@ function StocksTable({ stocks }: { stocks: DiscoveryStockResult[] }) {
               <td>{scoreText(stock.fundamental_score)}</td>
               <td>{scoreText(stock.inherited_macro_score)}</td>
               <td>{finiteScore(stock.score_coverage_pct) ? `${stock.score_coverage_pct?.toFixed(1)}%` : "-"}</td>
-              <td>{stock.score_status || "-"}</td>
+              <td><span className={`badge ${stock.score_status?.toLowerCase()}`}>{stock.score_status || "-"}</span></td>
             </tr>
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function ConstituentsModal({
+  runId,
+  horizon,
+  entityType,
+  entityName,
+  parentSector,
+  parentIndustry,
+  onClose
+}: {
+  runId: string;
+  horizon: string;
+  entityType: string;
+  entityName: string;
+  parentSector: string;
+  parentIndustry: string;
+  onClose: () => void;
+}) {
+  const [constituents, setConstituents] = useState<Constituent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+
+  const toggleRow = (symbol: string) => {
+    setExpandedRows(prev => {
+      const next = new Set(prev);
+      if (next.has(symbol)) next.delete(symbol);
+      else next.add(symbol);
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    let active = true;
+    const fetchConstituents = async () => {
+      setLoading(true);
+      try {
+        const url = `/api/v1/discovery/runs/${runId}/constituents?horizon=${horizon}&entity_type=${entityType}&entity_name=${encodeURIComponent(entityName)}&parent_sector=${encodeURIComponent(parentSector)}&parent_industry=${encodeURIComponent(parentIndustry)}`;
+        const res = await fetch(url);
+        const data = await res.json();
+        if (active && data.success) {
+          setConstituents(data.data);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    fetchConstituents();
+    return () => { active = false; };
+  }, [runId, horizon, entityType, entityName, parentSector, parentIndustry]);
+
+  return (
+    <div className="modal-overlay" onClick={onClose} style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+      <div className="modal-content panel" onClick={(e) => e.stopPropagation()} style={{ background: '#1c1c1e', padding: '20px', borderRadius: '8px', width: '90vw', maxWidth: '1000px', maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', border: '1px solid #3a3a3c' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <h2>{entityName} Constituents</h2>
+          <button onClick={onClose} className="secondary" style={{ padding: '4px 8px' }}>Close</button>
+        </div>
+        
+        {loading ? (
+          <div className="empty-state">Loading constituents...</div>
+        ) : constituents.length === 0 ? (
+          <div className="empty-state">No constituents found.</div>
+        ) : (
+          <div className="table-wrap" style={{ overflowY: 'auto' }}>
+            <table>
+              <thead>
+                <tr>
+                  <th style={{ width: '40px' }}></th>
+                  <th>Symbol</th>
+                  <th>Sector</th>
+                  <th>Industry</th>
+                  <th>Technical Score</th>
+                  <th>Fundamental Score</th>
+                </tr>
+              </thead>
+              <tbody>
+                {constituents.map((c) => (
+                  <Fragment key={c.symbol}>
+                    <tr onClick={() => toggleRow(c.symbol)} style={{ cursor: 'pointer' }} className="clickable-row">
+                      <td style={{ textAlign: 'center' }}>{expandedRows.has(c.symbol) ? '−' : '+'}</td>
+                      <td>{c.symbol}</td>
+                      <td>{c.sector}</td>
+                      <td>{c.industry}</td>
+                      <td>{c.technical_score !== null ? c.technical_score.toFixed(1) : "-"}</td>
+                      <td>{c.fundamental_score !== null ? c.fundamental_score.toFixed(1) : "-"}</td>
+                    </tr>
+                    {expandedRows.has(c.symbol) && (
+                      <tr>
+                        <td colSpan={6} style={{ padding: '0' }}>
+                          <ConstituentDetails constituent={c} />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ConstituentDetails({ constituent: c }: { constituent: Constituent }) {
+  const tech = c.tech_details;
+  const fund = c.fund_details;
+
+  return (
+    <div style={{ padding: '16px', background: '#252528', display: 'flex', gap: '24px', flexWrap: 'wrap', borderBottom: '1px solid #3a3a3c' }}>
+      <div style={{ flex: '1 1 300px' }}>
+        <h4 style={{ margin: '0 0 12px 0', color: '#4da6ff' }}>Technical Details</h4>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.9rem' }}>
+          <span style={{ color: '#888' }}>Company Return:</span>
+          <span style={{ fontWeight: 600, color: (c.company_return || 0) >= 0 ? '#4caf50' : '#f44336' }}>
+            {c.company_return != null ? c.company_return.toFixed(2) + '%' : '-'}
+          </span>
+          
+          <span style={{ color: '#888' }}>Benchmark Return:</span>
+          <span>{c.benchmark_return != null ? c.benchmark_return.toFixed(2) + '%' : '-'}</span>
+          
+          <span style={{ color: '#888' }}>Volume Change:</span>
+          <span>{tech?.technical_score?.components?.volume?.score?.toFixed(1) || '-'} pts</span>
+
+          <span style={{ color: '#888' }}>Consistency Score:</span>
+          <span>{tech?.technical_score?.components?.consistency?.score?.toFixed(1) || '-'} pts</span>
+          
+          <span style={{ color: '#888' }}>Pos. Periods / Valid:</span>
+          <span>
+            {tech?.consistency?.positive_periods ?? '-'}/{tech?.consistency?.valid_periods ?? '-'}
+          </span>
+
+          <span style={{ color: '#888' }}>Outperformed Periods:</span>
+          <span>
+            {tech?.consistency?.outperforming_periods ?? '-'}/{tech?.consistency?.valid_periods ?? '-'}
+          </span>
+        </div>
+      </div>
+      
+      <div style={{ flex: '1 1 400px' }}>
+        <h4 style={{ margin: '0 0 12px 0', color: '#ffd54f' }}>Fundamental Details</h4>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.9rem' }}>
+          <span style={{ color: '#888' }}>Sales Growth:</span>
+          <span style={{ fontWeight: 600, color: (fund?.fundamental_scoring?.growth?.sales_growth?.company_value || 0) >= 0 ? '#4caf50' : '#f44336' }}>
+            {fund?.fundamental_scoring?.growth?.sales_growth?.company_value != null ? fund.fundamental_scoring.growth.sales_growth.company_value.toFixed(2) + '%' : '-'}
+          </span>
+          
+          <span style={{ color: '#888' }}>Operating Margin:</span>
+          <span style={{ fontWeight: 600 }}>
+            {fund?.fundamental_scoring?.profitability?.operating_margin?.company_value != null ? fund.fundamental_scoring.profitability.operating_margin.company_value.toFixed(2) + '%' : '-'}
+          </span>
+          
+          <span style={{ color: '#888' }}>Margin Trend (Change):</span>
+          <span>
+            {fund?.fundamental_scoring?.profitability?.margin_trend?.company_value != null ? fund.fundamental_scoring.profitability.margin_trend.company_value.toFixed(2) + ' pp' : '-'}
+          </span>
+          
+          <span style={{ color: '#888' }}>Debt to Equity:</span>
+          <span>
+            {fund?.fundamental_scoring?.financial_strength?.debt_to_equity?.company_value != null ? fund.fundamental_scoring.financial_strength.debt_to_equity.company_value.toFixed(2) : '-'}
+          </span>
+          
+          <span style={{ color: '#888' }}>Borrowing Change:</span>
+          <span>
+            {fund?.fundamental_scoring?.financial_strength?.borrowing_trend?.company_value != null ? fund.fundamental_scoring.financial_strength.borrowing_trend.company_value.toFixed(2) + '%' : '-'}
+          </span>
+
+          <span style={{ color: '#888' }}>OCF to PAT:</span>
+          <span>
+            {fund?.fundamental_scoring?.earnings_quality?.latest_cash_conversion?.company_value != null ? fund.fundamental_scoring.earnings_quality.latest_cash_conversion.company_value.toFixed(2) : '-'}
+          </span>
+          
+          <span style={{ color: '#888' }}>Positive PAT Ratio:</span>
+          <span>
+            {fund?.fundamental_scoring?.earnings_quality?.profit_history?.positive_pat_period_ratio != null ? fund.fundamental_scoring.earnings_quality.profit_history.positive_pat_period_ratio.toFixed(1) + '%' : '-'}
+          </span>
+        </div>
+      </div>
     </div>
   );
 }

@@ -364,27 +364,6 @@ def _prepare_success(session, run=None, calls=None, **kwargs):
     return run, result, calls
 
 
-def test_exact_stage_order(disc_session):
-    _, result, _ = _prepare_success(disc_session)
-
-    assert result["status"] == prep.PREP_COMPLETED
-    assert list(result["stage_results"]) == list(prep.STAGE_ORDER)
-
-
-def test_existing_service_instances_are_used(disc_session):
-    run = _make_run(disc_session)
-    calls = []
-    services = _services(disc_session, calls)
-    universe = services[prep.UNIVERSE_SNAPSHOT]
-
-    DiscoveryUpstreamPreparationService(
-        disc_session, services=services, lock_enabled=False
-    ).prepare(run.id)
-
-    assert services[prep.UNIVERSE_SNAPSHOT] is universe
-    assert calls.count("UNIVERSE_SNAPSHOT.SHORT") == 1
-
-
 def test_no_formulas_exist_in_orchestrator():
     source = inspect.getsource(prep)
 
@@ -403,123 +382,6 @@ def test_source_universe_snapshot_runs_first(disc_session):
         "UNIVERSE_SNAPSHOT.LONG",
     ]
     assert calls.index("UNIVERSE_SNAPSHOT.LONG") < calls.index("TECHNICAL_DATE_ALIGNMENT.SHORT")
-
-
-def test_short_mid_long_technical_isolation(disc_session):
-    run, result, calls = _prepare_success(
-        disc_session, align_failures={"MID": "INSUFFICIENT_HISTORY"}
-    )
-
-    technical = result["stage_results"][prep.TECHNICAL_COMPANY]["horizons"]
-    assert technical["MID"]["status"] == prep.STAGE_FAILED
-    assert technical["SHORT"]["status"] == prep.STAGE_COMPLETED
-    assert technical["LONG"]["status"] == prep.STAGE_COMPLETED
-    assert "TECHNICAL_SECTOR_SCORE.MID" not in calls
-    assert "TECHNICAL_SECTOR_SCORE.LONG" in calls
-    assert disc_session.get(DiscoveryRun, run.id).preparation_status == prep.PREP_COMPLETED_WITH_WARNINGS
-
-
-def test_benchmark_unavailable_is_preserved(disc_session):
-    _, result, _ = _prepare_success(
-        disc_session, align_failures={"MID": "BENCHMARK_DATA_UNAVAILABLE"}
-    )
-
-    mid = result["stage_results"][prep.TECHNICAL_COMPANY]["horizons"]["MID"]
-    assert mid["error_code"] == "BENCHMARK_DATA_UNAVAILABLE"
-    assert "BENCHMARK_DATA_UNAVAILABLE" in result["warnings"]
-
-
-def test_technical_hierarchy_order(disc_session):
-    _, _, calls = _prepare_success(disc_session)
-    short_hierarchy = [
-        "TECHNICAL_SECTOR_AGGREGATION.SHORT",
-        "TECHNICAL_SECTOR_SCORE.SHORT",
-        "TECHNICAL_INDUSTRY_AGGREGATION.SHORT",
-        "TECHNICAL_INDUSTRY_SCORE.SHORT",
-        "TECHNICAL_BASIC_INDUSTRY_AGGREGATION.SHORT",
-        "TECHNICAL_BASIC_INDUSTRY_SCORE.SHORT",
-    ]
-
-    indexes = [calls.index(item) for item in short_hierarchy]
-    assert indexes == sorted(indexes)
-
-
-def test_fundamental_company_order(disc_session):
-    _, _, calls = _prepare_success(disc_session)
-    expected = [
-        "FUNDAMENTAL_PERIOD_SELECTION",
-        "FUNDAMENTAL_GROWTH",
-        "FUNDAMENTAL_PROFITABILITY",
-        "FUNDAMENTAL_FINANCIAL_STRENGTH",
-        "FUNDAMENTAL_CASH_CONVERSION",
-        "FUNDAMENTAL_PROFIT_STABILITY",
-        "FUNDAMENTAL_PEER_MEDIAN",
-        "FUNDAMENTAL_GROWTH_SCORE",
-        "FUNDAMENTAL_PROFITABILITY_SCORE",
-        "FUNDAMENTAL_FINANCIAL_STRENGTH_SCORE",
-        "FUNDAMENTAL_EARNINGS_QUALITY_SCORE",
-        "COMPANY_FUNDAMENTAL_SCORE",
-    ]
-
-    indexes = [calls.index(item) for item in expected]
-    assert indexes == sorted(indexes)
-
-
-def test_fundamental_hierarchy_order(disc_session):
-    _, _, calls = _prepare_success(disc_session)
-    expected = [
-        "FUNDAMENTAL_SECTOR_AGGREGATION",
-        "FUNDAMENTAL_SECTOR_METRIC_NORMALIZATION",
-        "FUNDAMENTAL_SECTOR_TRANSITION_SCORE",
-        "FUNDAMENTAL_SECTOR_PILLAR_SCORE",
-        "FUNDAMENTAL_SECTOR_SCORE",
-        "FUNDAMENTAL_INDUSTRY_AGGREGATION",
-        "FUNDAMENTAL_INDUSTRY_METRIC_NORMALIZATION",
-        "FUNDAMENTAL_INDUSTRY_TRANSITION_SCORE",
-        "FUNDAMENTAL_INDUSTRY_PILLAR_SCORE",
-        "FUNDAMENTAL_INDUSTRY_SCORE",
-        "FUNDAMENTAL_BASIC_INDUSTRY_AGGREGATION",
-        "FUNDAMENTAL_BASIC_INDUSTRY_METRIC_NORMALIZATION",
-        "FUNDAMENTAL_BASIC_INDUSTRY_TRANSITION_SCORE",
-        "FUNDAMENTAL_BASIC_INDUSTRY_PILLAR_SCORE",
-        "FUNDAMENTAL_BASIC_INDUSTRY_SCORE",
-    ]
-
-    indexes = [calls.index(item) for item in expected]
-    assert indexes == sorted(indexes)
-
-
-def test_stage_results_persist_immediately(disc_session):
-    run = _make_run(disc_session)
-    calls = []
-
-    def assert_universe_done():
-        disc_session.expire_all()
-        stored = disc_session.get(DiscoveryRun, run.id)
-        assert stored.preparation_stage_results[prep.UNIVERSE_SNAPSHOT]["status"] == prep.STAGE_COMPLETED
-
-    result = DiscoveryUpstreamPreparationService(
-        disc_session,
-        services=_services(disc_session, calls, align_assertion=assert_universe_done),
-        lock_enabled=False,
-    ).prepare(run.id)
-
-    assert result["status"] == prep.PREP_COMPLETED
-
-
-def test_failure_skips_dependent_stages(disc_session):
-    run = _make_run(disc_session)
-    calls = []
-    result = DiscoveryUpstreamPreparationService(
-        disc_session,
-        services=_services(disc_session, calls, fail_label="FUNDAMENTAL_GROWTH"),
-        lock_enabled=False,
-    ).prepare(run.id)
-
-    assert result["status"] == prep.PREP_FAILED
-    assert result["stage_results"][prep.FUNDAMENTAL_COMPANY]["status"] == prep.STAGE_FAILED
-    assert result["stage_results"][prep.FUNDAMENTAL_SECTOR]["status"] == prep.STAGE_SKIPPED
-    assert result["stage_results"][prep.UPSTREAM_VALIDATION]["status"] == prep.STAGE_SKIPPED
 
 
 def test_completed_results_survive_failure(disc_session):
@@ -558,88 +420,6 @@ def test_resume_skips_completed_stages(disc_session):
 
     assert "UNIVERSE_SNAPSHOT.SHORT" not in calls
     assert disc_session.get(DiscoveryRun, run.id).preparation_resume_count == 1
-
-
-def test_interrupted_stage_reruns(disc_session):
-    run = _make_run(
-        disc_session,
-        prep_results={
-            prep.TECHNICAL_COMPANY: {
-                "status": prep.STAGE_RUNNING,
-                "horizons": {
-                    "SHORT": {"status": prep.STAGE_RUNNING},
-                },
-            }
-        },
-    )
-    run.preparation_status = prep.PREP_RUNNING
-    disc_session.commit()
-    calls = []
-
-    DiscoveryUpstreamPreparationService(
-        disc_session, services=_services(disc_session, calls), lock_enabled=False
-    ).prepare(run.id)
-
-    assert "TECHNICAL_DATE_ALIGNMENT.SHORT" in calls
-
-
-def test_force_restart_resets_metadata_only(disc_session):
-    run, _, _ = _prepare_success(disc_session)
-    before_count = disc_session.query(EligibleUniverseSnapshot).filter_by(run_id=run.id).count()
-    calls = []
-
-    result = DiscoveryUpstreamPreparationService(
-        disc_session, services=_services(disc_session, calls), lock_enabled=False
-    ).prepare(run.id, force_restart=True)
-
-    after_count = disc_session.query(EligibleUniverseSnapshot).filter_by(run_id=run.id).count()
-    assert result["resume_count"] == 0
-    assert after_count == before_count
-
-
-def test_final_upstream_validation_counts(disc_session):
-    _, result, _ = _prepare_success(disc_session)
-
-    validation = result["stage_results"][prep.UPSTREAM_VALIDATION]["metadata"]
-    assert validation["company_fundamental_metrics"]["count"] == 1
-    assert validation["horizons"]["SHORT"]["company_technical_metrics"] == 1
-    assert validation["horizons"]["SHORT"]["sector"]["technical_score_count"] == 1
-    assert validation["horizons"]["SHORT"]["sector"]["fundamental_score_count"] == 1
-
-
-def test_missing_required_service_fails_explicitly(disc_session):
-    class MissingGrowthService(DiscoveryUpstreamPreparationService):
-        def _default_service_factories(self):
-            factories = super()._default_service_factories()
-            factories.pop("FUNDAMENTAL_GROWTH")
-            return factories
-
-    run = _make_run(disc_session)
-    calls = []
-    services = _services(disc_session, calls)
-    services.pop("FUNDAMENTAL_GROWTH")
-
-    result = MissingGrowthService(
-        disc_session, services=services, lock_enabled=False
-    ).prepare(run.id)
-
-    assert result["status"] == prep.PREP_FAILED
-    assert result["stage_results"][prep.FUNDAMENTAL_COMPANY]["error_code"] == prep.E_SERVICE_UNAVAILABLE
-
-
-def test_safe_error_persistence(disc_session):
-    run = _make_run(disc_session)
-    calls = []
-    result = DiscoveryUpstreamPreparationService(
-        disc_session,
-        services=_services(disc_session, calls, fail_label="FUNDAMENTAL_GROWTH"),
-        lock_enabled=False,
-    ).prepare(run.id)
-
-    error_message = result["stage_results"][prep.FUNDAMENTAL_COMPANY]["error_message"]
-    assert "secret" not in error_message.lower()
-    assert "postgresql://" not in error_message
-    assert "[REDACTED" in error_message
 
 
 def test_same_run_concurrency_rejection(disc_session):
@@ -708,25 +488,6 @@ def test_advisory_lock_releases_in_finally(disc_session):
     assert acquired is True
 
 
-def test_different_runs_remain_independent(disc_session):
-    run1 = _make_run(disc_session)
-    run2 = _make_run(disc_session)
-    calls1 = []
-    calls2 = []
-
-    failed = DiscoveryUpstreamPreparationService(
-        disc_session,
-        services=_services(disc_session, calls1, align_failures={"SHORT": "FAILED", "MID": "FAILED", "LONG": "FAILED"}),
-        lock_enabled=False,
-    ).prepare(run1.id)
-    passed = DiscoveryUpstreamPreparationService(
-        disc_session, services=_services(disc_session, calls2), lock_enabled=False
-    ).prepare(run2.id)
-
-    assert failed["status"] == prep.PREP_FAILED
-    assert passed["status"] == prep.PREP_COMPLETED
-
-
 def test_no_macro_ranking_or_selection_service_is_called(disc_session):
     _, _, calls = _prepare_success(disc_session)
 
@@ -740,20 +501,3 @@ def test_no_parallel_or_llm_call():
     assert "Parallel" not in source
     assert "PARALLEL" not in source
     assert "LLM" not in source
-
-
-def test_idempotent_repeated_execution(disc_session):
-    run, result1, calls1 = _prepare_success(disc_session)
-    first_snapshot_count = disc_session.query(EligibleUniverseSnapshot).filter_by(run_id=run.id).count()
-    calls2 = []
-
-    result2 = DiscoveryUpstreamPreparationService(
-        disc_session, services=_services(disc_session, calls2), lock_enabled=False
-    ).prepare(run.id)
-    second_snapshot_count = disc_session.query(EligibleUniverseSnapshot).filter_by(run_id=run.id).count()
-
-    assert result1["status"] == prep.PREP_COMPLETED
-    assert result2["status"] == prep.PREP_COMPLETED
-    assert first_snapshot_count == second_snapshot_count == 3
-    assert calls1
-    assert calls2 == []

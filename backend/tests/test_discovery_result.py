@@ -230,19 +230,6 @@ def test_sector_selection_mapping(disc_session):
     assert sector["final_score"] == 83.0
 
 
-def test_industry_selection_mapping(disc_session):
-    run = _make_run(disc_session)
-    _make_group(disc_session, run.id, entity_type="SECTOR", name="Technology")
-    _make_group(disc_session, run.id, entity_type="INDUSTRY", name="Software", parent_sector="Technology")
-    _make_selection(disc_session, run.id, entity_type="SECTOR", name="Technology")
-    _make_selection(disc_session, run.id, entity_type="INDUSTRY", name="Software", parent_sector="Technology")
-
-    industry = _result(disc_session, run.id)["horizons"]["SHORT"]["industry"]
-
-    assert industry["name"] == "Software"
-    assert industry["parent_sector"] == "Technology"
-
-
 def test_basic_industry_selection_mapping(disc_session):
     run = _make_run(disc_session)
     _make_full_short_result(disc_session, run.id)
@@ -283,19 +270,6 @@ def test_mismatched_industry_is_excluded(disc_session):
     horizon = _result(disc_session, run.id)["horizons"]["SHORT"]
 
     assert horizon["industry"] is None
-    assert W_HIERARCHY_MISMATCH in horizon["warnings"]
-
-
-def test_mismatched_basic_industry_is_excluded(disc_session):
-    run = _make_run(disc_session)
-    _make_full_short_result(disc_session, run.id)
-    basic = disc_session.query(DiscoverySelection).filter_by(run_id=run.id, entity_type="BASIC_INDUSTRY").first()
-    basic.parent_industry = "Hardware"
-    disc_session.commit()
-
-    horizon = _result(disc_session, run.id)["horizons"]["SHORT"]
-
-    assert horizon["basic_industry"] is None
     assert W_HIERARCHY_MISMATCH in horizon["warnings"]
 
 

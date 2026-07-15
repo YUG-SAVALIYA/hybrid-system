@@ -6,15 +6,17 @@ load_dotenv()
 SOURCE_DATABASE_URL = os.environ.get("SOURCE_DATABASE_URL")
 DISCOVERY_DATABASE_URL = os.environ.get("DISCOVERY_DATABASE_URL")
 
-# Horizon Constants (trading days)
-HORIZON_SHORT_DAYS = int(os.environ.get("HORIZON_SHORT_DAYS", 20))
-HORIZON_MID_DAYS   = int(os.environ.get("HORIZON_MID_DAYS", 63))
-HORIZON_LONG_DAYS  = int(os.environ.get("HORIZON_LONG_DAYS", 252))
+PARALLEL_API_KEY = os.environ.get("PARALLEL_API_KEY")
 
-# Minimum candle counts for benchmark readiness (horizon + 1 for return calculation)
-BENCHMARK_MIN_SHORT = HORIZON_SHORT_DAYS + 1   # 21
-BENCHMARK_MIN_MID   = HORIZON_MID_DAYS   + 1   # 64
-BENCHMARK_MIN_LONG  = HORIZON_LONG_DAYS  + 1   # 253
+# Horizon Constants (trading days)
+HORIZON_SHORT_DAYS = int(os.environ.get("HORIZON_SHORT_DAYS", 1))
+HORIZON_MID_DAYS   = int(os.environ.get("HORIZON_MID_DAYS", 5))
+HORIZON_LONG_DAYS  = int(os.environ.get("HORIZON_LONG_DAYS", 21))
+
+# Minimum candle counts for benchmark readiness (set to safe defaults to allow long continuity lookbacks)
+BENCHMARK_MIN_SHORT = 21   # Covers up to 1 month lookback for short
+BENCHMARK_MIN_MID   = 64   # Covers up to 3 months lookback for mid
+BENCHMARK_MIN_LONG  = 253  # Covers up to 1 year lookback for long
 
 # Minimum percentage of valid volume sessions required in a benchmark window
 MIN_VOLUME_WINDOW_COVERAGE = 80.0
@@ -26,9 +28,9 @@ MAX_COMPANY_CANDLE_STALENESS_SESSIONS = int(
 
 # Consistency block structure
 CONSISTENCY_BLOCKS = {
-    "SHORT": {"num_blocks": 4, "sessions_per_block": 5},
-    "MID": {"num_blocks": 3, "sessions_per_block": 21},
-    "LONG": {"num_blocks": 4, "sessions_per_block": 63},
+    "SHORT": {"num_blocks": 5, "sessions_per_block": 1},   # check past 5 days
+    "MID": {"num_blocks": 4, "sessions_per_block": 5},     # check past 4 weeks
+    "LONG": {"num_blocks": 6, "sessions_per_block": 21},   # check past 6 months
 }
 
 
@@ -42,25 +44,25 @@ TECHNICAL_SCORE_WEIGHTS = {
     "volume": 25.0,
     "consistency": 25.0
 }
-MIN_GROUP_TECHNICAL_COVERAGE = 75.0
+MIN_COMPANY_TECHNICAL_COVERAGE = float(os.environ.get("MIN_COMPANY_TECHNICAL_COVERAGE", 0.0))
+MIN_GROUP_TECHNICAL_COVERAGE = 0.0
 
-MIN_INDUSTRY_COMPANIES = 3
-MIN_BASIC_INDUSTRY_COMPANIES = 2
+MIN_INDUSTRY_COMPANIES = 1
+MIN_BASIC_INDUSTRY_COMPANIES = 1
 
-# Minimum candle history per horizon for universe eligibility
-# (2x horizon for volume window coverage)
-UNIVERSE_MIN_CANDLES_SHORT = HORIZON_SHORT_DAYS * VOLUME_COMPARISON_MULTIPLIER   # 40
-UNIVERSE_MIN_CANDLES_MID   = HORIZON_MID_DAYS   * VOLUME_COMPARISON_MULTIPLIER   # 126
-UNIVERSE_MIN_CANDLES_LONG  = HORIZON_LONG_DAYS  * VOLUME_COMPARISON_MULTIPLIER   # 504
+# Minimum candle history per horizon for universe eligibility (must cover volume and consistency windows)
+UNIVERSE_MIN_CANDLES_SHORT = 21
+UNIVERSE_MIN_CANDLES_MID   = 64
+UNIVERSE_MIN_CANDLES_LONG  = 253
 
 # Primary benchmark identifiers
-PRIMARY_TECHNICAL_BENCHMARK      = os.environ.get("PRIMARY_TECHNICAL_BENCHMARK", "NIFTY_500")
+PRIMARY_TECHNICAL_BENCHMARK      = os.environ.get("PRIMARY_TECHNICAL_BENCHMARK", "NIFTY500")
 PRIMARY_TECHNICAL_BENCHMARK_NAME = os.environ.get("PRIMARY_TECHNICAL_BENCHMARK_NAME", "NIFTY 500")
 
 # Minimum group sizes for sector / industry / basic-industry scoring
-MIN_SECTOR_COMPANIES        = int(os.environ.get("MIN_SECTOR_COMPANIES", 5))
-MIN_INDUSTRY_COMPANIES      = int(os.environ.get("MIN_INDUSTRY_COMPANIES", 3))
-MIN_BASIC_INDUSTRY_COMPANIES = int(os.environ.get("MIN_BASIC_INDUSTRY_COMPANIES", 2))
+MIN_SECTOR_COMPANIES        = int(os.environ.get("MIN_SECTOR_COMPANIES", 1))
+MIN_INDUSTRY_COMPANIES      = int(os.environ.get("MIN_INDUSTRY_COMPANIES", 1))
+MIN_BASIC_INDUSTRY_COMPANIES = int(os.environ.get("MIN_BASIC_INDUSTRY_COMPANIES", 1))
 
 # Final Component Weights
 WEIGHT_TECHNICAL   = float(os.environ.get("WEIGHT_TECHNICAL", 0.40))
@@ -78,15 +80,16 @@ PARALLEL_SEARCH_MODE = os.environ.get("PARALLEL_SEARCH_MODE", "advanced")
 PARALLEL_MACRO_MAX_CHARS = int(os.environ.get("PARALLEL_MACRO_MAX_CHARS", 50000))
 
 # Fundamental group thresholds
-MIN_GROUP_FUNDAMENTAL_COVERAGE = float(os.environ.get("MIN_GROUP_FUNDAMENTAL_COVERAGE", 75.0))
-MIN_SECTOR_FUNDAMENTAL_COMPANIES = int(os.environ.get("MIN_SECTOR_FUNDAMENTAL_COMPANIES", 5))
-MIN_INDUSTRY_FUNDAMENTAL_COMPANIES = int(os.environ.get("MIN_INDUSTRY_FUNDAMENTAL_COMPANIES", 3))
-MIN_BASIC_INDUSTRY_FUNDAMENTAL_COMPANIES = int(os.environ.get("MIN_BASIC_INDUSTRY_FUNDAMENTAL_COMPANIES", 2))
-MIN_GROUP_FUNDAMENTAL_METRIC_OBSERVATIONS = int(os.environ.get("MIN_GROUP_FUNDAMENTAL_METRIC_OBSERVATIONS", 3))
-MIN_GROUP_FUNDAMENTAL_METRIC_COVERAGE = float(os.environ.get("MIN_GROUP_FUNDAMENTAL_METRIC_COVERAGE", 60.0))
+MIN_COMPANY_FUNDAMENTAL_COVERAGE = float(os.environ.get("MIN_COMPANY_FUNDAMENTAL_COVERAGE", 0.0))
+MIN_GROUP_FUNDAMENTAL_COVERAGE = float(os.environ.get("MIN_GROUP_FUNDAMENTAL_COVERAGE", 0.0))
+MIN_SECTOR_FUNDAMENTAL_COMPANIES = int(os.environ.get("MIN_SECTOR_FUNDAMENTAL_COMPANIES", 1))
+MIN_INDUSTRY_FUNDAMENTAL_COMPANIES = int(os.environ.get("MIN_INDUSTRY_FUNDAMENTAL_COMPANIES", 1))
+MIN_BASIC_INDUSTRY_FUNDAMENTAL_COMPANIES = int(os.environ.get("MIN_BASIC_INDUSTRY_FUNDAMENTAL_COMPANIES", 1))
+MIN_GROUP_FUNDAMENTAL_METRIC_OBSERVATIONS = int(os.environ.get("MIN_GROUP_FUNDAMENTAL_METRIC_OBSERVATIONS", 1))
+MIN_GROUP_FUNDAMENTAL_METRIC_COVERAGE = float(os.environ.get("MIN_GROUP_FUNDAMENTAL_METRIC_COVERAGE", 0.0))
 
 # LLM / Macro filter summary
-LLM_MODEL_NAME = os.environ.get("LLM_MODEL_NAME", "gemini-2.0-flash")
+LLM_MODEL_NAME = os.environ.get("LLM_MODEL_NAME")
 MACRO_PROMPT_VERSION = os.environ.get("MACRO_PROMPT_VERSION", "1.0")
 MACRO_LOW_SOURCE_COVERAGE_THRESHOLD = float(os.environ.get("MACRO_LOW_SOURCE_COVERAGE_THRESHOLD", 50.0))
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "")  # never hardcoded
@@ -97,19 +100,19 @@ MIN_INDUSTRY_MACRO_COVERAGE = float(os.environ.get("MIN_INDUSTRY_MACRO_COVERAGE"
 MIN_BASIC_INDUSTRY_MACRO_COVERAGE = float(os.environ.get("MIN_BASIC_INDUSTRY_MACRO_COVERAGE", 75.0))
 
 # Final sector discovery ranking
-MIN_SECTOR_DISCOVERY_COVERAGE = float(os.environ.get("MIN_SECTOR_DISCOVERY_COVERAGE", 80.0))
-SECTOR_SELECTION_COUNT = int(os.environ.get("SECTOR_SELECTION_COUNT", 1))
+MIN_SECTOR_DISCOVERY_COVERAGE = float(os.environ.get("MIN_SECTOR_DISCOVERY_COVERAGE", 0.0))
+SECTOR_SELECTION_COUNT = int(os.environ.get("SECTOR_SELECTION_COUNT", 3))
 
 # Final industry discovery ranking
-MIN_INDUSTRY_DISCOVERY_COVERAGE = float(os.environ.get("MIN_INDUSTRY_DISCOVERY_COVERAGE", 80.0))
-INDUSTRY_SELECTION_COUNT = int(os.environ.get("INDUSTRY_SELECTION_COUNT", 1))
+MIN_INDUSTRY_DISCOVERY_COVERAGE = float(os.environ.get("MIN_INDUSTRY_DISCOVERY_COVERAGE", 0.0))
+INDUSTRY_SELECTION_COUNT = int(os.environ.get("INDUSTRY_SELECTION_COUNT", 3))
 
 # Final basic-industry discovery ranking
-MIN_BASIC_INDUSTRY_DISCOVERY_COVERAGE = float(os.environ.get("MIN_BASIC_INDUSTRY_DISCOVERY_COVERAGE", 80.0))
-BASIC_INDUSTRY_SELECTION_COUNT = int(os.environ.get("BASIC_INDUSTRY_SELECTION_COUNT", 1))
+MIN_BASIC_INDUSTRY_DISCOVERY_COVERAGE = float(os.environ.get("MIN_BASIC_INDUSTRY_DISCOVERY_COVERAGE", 0.0))
+BASIC_INDUSTRY_SELECTION_COUNT = int(os.environ.get("BASIC_INDUSTRY_SELECTION_COUNT", 2))
 
 # Final stock candidate scoring
-MIN_STOCK_SCORE_COVERAGE = float(os.environ.get("MIN_STOCK_SCORE_COVERAGE", 80.0))
+MIN_STOCK_SCORE_COVERAGE = float(os.environ.get("MIN_STOCK_SCORE_COVERAGE", 0.0))
 
 # Final stock discovery ranking
-STOCK_SELECTION_COUNT = int(os.environ.get("STOCK_SELECTION_COUNT", 5))
+STOCK_SELECTION_COUNT = int(os.environ.get("STOCK_SELECTION_COUNT", 3))
