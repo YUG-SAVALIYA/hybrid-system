@@ -202,7 +202,7 @@ function buildHorizonView(result: DiscoveryResult | null, key: DiscoveryHorizon)
   const horizon = result?.horizons[key];
   const view: HorizonView = { sectors: [], industries: [], basicIndustries: [], stocks: [], warnings: [] };
   if (!horizon) return view;
-  
+
   view.sectors = horizon.sectors || [];
   view.industries = horizon.industries || [];
   view.basicIndustries = horizon.basic_industries || [];
@@ -265,17 +265,17 @@ function buildProcessLog(
   return items;
 }
 
-export function DiscoveryPage({ 
-  runId, 
-  activeTab, 
-  onGroupSelect, 
+export function DiscoveryPage({
+  runId,
+  activeTab,
+  onGroupSelect,
   onStockSelect,
   onRunCreated
-}: { 
-  runId?: string; 
-  activeTab?: string; 
-  onGroupSelect?: (group: {type: string, name: string, parentSector: string, parentIndustry: string, horizon: string}) => void;
-  onStockSelect?: (stock: {symbol: string, horizon: string}) => void;
+}: {
+  runId?: string;
+  activeTab?: string;
+  onGroupSelect?: (group: { type: string, name: string, parentSector: string, parentIndustry: string, horizon: string }) => void;
+  onStockSelect?: (stock: { symbol: string, horizon: string }) => void;
   onRunCreated?: (runId: string) => void;
 }) {
   const [flowState, setFlowState] = useState<FlowState>("IDLE");
@@ -537,144 +537,130 @@ export function DiscoveryPage({
       {!activeTab && (
         <section className="dashboard-grid">
           {!runId && (
-          <form className="panel run-panel" onSubmit={startDiscovery}>
-          <div className="panel-title">
-            <h2>Run Controls</h2>
-          {isBusy && <span className="spinner-label">Working...</span>}
-          </div>
-          <label>
-            Target Horizon
-            <select
-              value={runHorizon}
-              onChange={(event) => setRunHorizon(event.target.value as DiscoveryHorizon)}
-            >
-              <option value="SHORT">SHORT</option>
-              <option value="MID">MID</option>
-              <option value="LONG">LONG</option>
-            </select>
-          </label>
-          <label>
-            Custom Run ID
-            <input
-              value={customRunId}
-              maxLength={128}
-              aria-invalid={!runIdValid}
-              placeholder="Optional"
-              onChange={(event) => setCustomRunId(event.target.value)}
-            />
-          </label>
-          {!runIdValid && <p className="field-error">Use letters, numbers, hyphens, and underscores only.</p>}
-
-          <button type="submit" disabled={isBusy || !runIdValid}>
-            {isBusy ? "Discovery Running" : "Start Discovery"}
-          </button>
-
-          <details open={advancedOpen} onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}>
-            <summary>Advanced Options</summary>
-            <div className="advanced-options">
-              <label className="check-row">
-                <input
-                  type="checkbox"
-                  checked={resumeExisting}
-                  onChange={(event) => setResumeExisting(event.target.checked)}
-                />
-                Resume existing run
-              </label>
-              <label className="check-row">
-                <input
-                  type="checkbox"
-                  checked={forceRestartPreparation}
-                  onChange={(event) => setForceRestartPreparation(event.target.checked)}
-                />
-                Force restart preparation
-              </label>
-              <label className="check-row">
-                <input
-                  type="checkbox"
-                  checked={forceRestartExecution}
-                  onChange={(event) => setForceRestartExecution(event.target.checked)}
-                />
-                Force restart discovery execution
+            <form className="panel run-panel" onSubmit={startDiscovery}>
+              <div className="panel-title">
+                <h2>Run Controls</h2>
+                {isBusy && <span className="spinner-label">Working...</span>}
+              </div>
+              <label>
+                Target Horizon
+                <select
+                  value={runHorizon}
+                  onChange={(event) => setRunHorizon(event.target.value as DiscoveryHorizon)}
+                >
+                  <option value="SHORT">SHORT</option>
+                  <option value="MID">MID</option>
+                  <option value="LONG">LONG</option>
+                </select>
               </label>
               <label>
-                Load Existing Run
+                Custom Run ID
                 <input
-                  value={existingRunId}
+                  value={customRunId}
                   maxLength={128}
-                  aria-invalid={!existingRunIdValid}
-                  onChange={(event) => setExistingRunId(event.target.value)}
+                  aria-invalid={!runIdValid}
+                  placeholder="Optional"
+                  onChange={(event) => setCustomRunId(event.target.value)}
                 />
               </label>
-              <div className="button-row">
-                <button type="button" className="secondary" disabled={isBusy || !existingRunId.trim() || !existingRunIdValid} onClick={loadExisting}>
-                  Load Result
-                </button>
-                <button type="button" className="secondary" disabled={isBusy || !activeRunId} onClick={resumePreparation}>
-                  Resume Preparation
-                </button>
-                <button type="button" className="secondary" disabled={isBusy || !activeRunId} onClick={resumeExecution}>
-                  Resume Execution
-                </button>
-              </div>
-            </div>
-          </details>
-        </form>
-        )}
+              {!runIdValid && <p className="field-error">Use letters, numbers, hyphens, and underscores only.</p>}
 
-        <section className="panel progress-panel" aria-label="Pipeline progress">
-          <div className="panel-title">
-            <h2>Pipeline Progress</h2>
-            {isPolling && <span className="spinner-label">Refreshing result...</span>}
-          </div>
-          <ol className="timeline-compact">
-            {STAGES.map((stage) => {
-              const source = stage.source === "preparation" ? preparationStages : result?.stage_results || {};
-              const stageResult = source[stage.key];
-              const status = stageStatus(stageResult);
-              
-              let title = stage.label;
-              if (status === "FAILED" && stageResult?.error_message) {
-                title += ` - Error: ${stageResult.error_message}`;
-              }
-              
-              return (
-                <li className={`compact-pill pill-${status.toLowerCase()}`} key={stage.key} title={title}>
-                  <span className="pill-dot"></span>
-                  <span className="pill-label">{stage.label}</span>
-                </li>
-              );
-            })}
-          </ol>
+              <button type="submit" disabled={isBusy || !runIdValid}>
+                {isBusy ? "Discovery Running" : "Start Discovery"}
+              </button>
+
+              <details open={advancedOpen} onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}>
+                <summary>Advanced Options</summary>
+                <div className="advanced-options">
+                  <label className="check-row">
+                    <input
+                      type="checkbox"
+                      checked={resumeExisting}
+                      onChange={(event) => setResumeExisting(event.target.checked)}
+                    />
+                    Resume existing run
+                  </label>
+                  <label className="check-row">
+                    <input
+                      type="checkbox"
+                      checked={forceRestartPreparation}
+                      onChange={(event) => setForceRestartPreparation(event.target.checked)}
+                    />
+                    Force restart preparation
+                  </label>
+                  <label className="check-row">
+                    <input
+                      type="checkbox"
+                      checked={forceRestartExecution}
+                      onChange={(event) => setForceRestartExecution(event.target.checked)}
+                    />
+                    Force restart discovery execution
+                  </label>
+                  <label>
+                    Load Existing Run
+                    <input
+                      value={existingRunId}
+                      maxLength={128}
+                      aria-invalid={!existingRunIdValid}
+                      onChange={(event) => setExistingRunId(event.target.value)}
+                    />
+                  </label>
+                  <div className="button-row">
+                    <button type="button" className="secondary" disabled={isBusy || !existingRunId.trim() || !existingRunIdValid} onClick={loadExisting}>
+                      Load Result
+                    </button>
+                    <button type="button" className="secondary" disabled={isBusy || !activeRunId} onClick={resumePreparation}>
+                      Resume Preparation
+                    </button>
+                    <button type="button" className="secondary" disabled={isBusy || !activeRunId} onClick={resumeExecution}>
+                      Resume Execution
+                    </button>
+                  </div>
+                </div>
+              </details>
+            </form>
+          )}
+
+          <section className="panel progress-panel" aria-label="Pipeline progress">
+            <div className="panel-title">
+              <h2>Pipeline Progress</h2>
+              {isPolling && <span className="spinner-label">Refreshing result...</span>}
+            </div>
+            <ol className="timeline-compact">
+              {STAGES.map((stage) => {
+                const source = stage.source === "preparation" ? preparationStages : result?.stage_results || {};
+                const stageResult = source[stage.key];
+                const status = stageStatus(stageResult);
+
+                let title = stage.label;
+                if (status === "FAILED" && stageResult?.error_message) {
+                  title += ` - Error: ${stageResult.error_message}`;
+                }
+
+                return (
+                  <li className={`compact-pill pill-${status.toLowerCase()}`} key={stage.key} title={title}>
+                    <span className="pill-dot"></span>
+                    <span className="pill-label">{stage.label}</span>
+                  </li>
+                );
+              })}
+            </ol>
+          </section>
         </section>
-      </section>
       )}
 
       {activeTab && (
         <section className="panel results-panel">
           <div className="panel-title">
             <h2>Horizon Results</h2>
-            <div className="tabs" role="tablist" aria-label="Discovery horizons">
-              {HORIZONS.map(({ key, label }) => (
-                <button
-                  key={key}
-                  role="tab"
-                  type="button"
-                  aria-selected={activeHorizon === key}
-                  className={activeHorizon === key ? "tab active" : "tab"}
-                  onClick={() => setActiveHorizon(key)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
           </div>
           {emptyMessage ? (
             <div className="empty-state">{emptyMessage}</div>
           ) : (
             <div className="result-content">
-              {activeViewTab === "SECTORS" && <GroupTable title="Sectors" groups={selectedHorizonView.sectors} onRowClick={(name, ps, pi) => onGroupSelect?.({type: 'SECTOR', name, parentSector: ps, parentIndustry: pi, horizon: activeHorizon})} />}
-              {activeViewTab === "INDUSTRIES" && <GroupTable title="Industries" groups={selectedHorizonView.industries} showParentSector={true} onRowClick={(name, ps, pi) => onGroupSelect?.({type: 'INDUSTRY', name, parentSector: ps, parentIndustry: pi, horizon: activeHorizon})} />}
-              {activeViewTab === "BASIC_INDUSTRIES" && <GroupTable title="Basic Industries" groups={selectedHorizonView.basicIndustries} showParentSector={true} showParentIndustry={true} onRowClick={(name, ps, pi) => onGroupSelect?.({type: 'BASIC_INDUSTRY', name, parentSector: ps, parentIndustry: pi, horizon: activeHorizon})} />}
+              {activeViewTab === "SECTORS" && <GroupTable title="Sectors" groups={selectedHorizonView.sectors} onRowClick={(name, ps, pi) => onGroupSelect?.({ type: 'SECTOR', name, parentSector: ps, parentIndustry: pi, horizon: activeHorizon })} />}
+              {activeViewTab === "INDUSTRIES" && <GroupTable title="Industries" groups={selectedHorizonView.industries} showParentSector={true} onRowClick={(name, ps, pi) => onGroupSelect?.({ type: 'INDUSTRY', name, parentSector: ps, parentIndustry: pi, horizon: activeHorizon })} />}
+              {activeViewTab === "BASIC_INDUSTRIES" && <GroupTable title="Basic Industries" groups={selectedHorizonView.basicIndustries} showParentSector={true} showParentIndustry={true} onRowClick={(name, ps, pi) => onGroupSelect?.({ type: 'BASIC_INDUSTRY', name, parentSector: ps, parentIndustry: pi, horizon: activeHorizon })} />}
               {activeViewTab === "STOCKS" && activeRunId && <StocksTable runId={activeRunId} horizon={activeHorizon} stocks={selectedHorizonView.stocks} onStockSelect={onStockSelect} />}
             </div>
           )}
@@ -684,14 +670,14 @@ export function DiscoveryPage({
   );
 }
 
-function GroupTable({ 
-  title, 
+function GroupTable({
+  title,
   groups,
   showParentSector = false,
   showParentIndustry = false,
   onRowClick
-}: { 
-  title: string; 
+}: {
+  title: string;
   groups: DiscoveryGroupResult[];
   showParentSector?: boolean;
   showParentIndustry?: boolean;
@@ -719,7 +705,7 @@ function GroupTable({
         </thead>
         <tbody>
           {groups.map((group) => (
-            <tr 
+            <tr
               key={`${group.rank}-${group.name}`}
               onClick={() => onRowClick && onRowClick(group.name, group.parent_sector || '', group.parent_industry || '')}
               style={onRowClick ? { cursor: 'pointer' } : {}}
@@ -744,20 +730,20 @@ function GroupTable({
   );
 }
 
-function StocksTable({ 
-  runId, 
-  horizon, 
-  stocks, 
-  onStockSelect 
-}: { 
-  runId: string; 
-  horizon: string; 
+function StocksTable({
+  runId,
+  horizon,
+  stocks,
+  onStockSelect
+}: {
+  runId: string;
+  horizon: string;
   stocks: DiscoveryStockResult[];
-  onStockSelect?: (stock: {symbol: string, horizon: string}) => void;
+  onStockSelect?: (stock: { symbol: string, horizon: string }) => void;
 }) {
   if (!stocks.length) return <div className="empty-state">No stocks found.</div>;
   const sorted = [...stocks].sort((a, b) => (a.rank || 9999) - (b.rank || 9999));
-  
+
   return (
     <div className="table-wrap">
       <table>
@@ -776,21 +762,21 @@ function StocksTable({
         </thead>
         <tbody>
           {sorted.map((stock) => (
-              <tr 
-                key={`${stock.rank}-${stock.symbol}`}
-                onClick={() => onStockSelect?.({ symbol: stock.symbol, horizon })} 
-                style={onStockSelect ? { cursor: 'pointer' } : {}} 
-                className={(onStockSelect ? "clickable-row" : "") + (stock.selected ? " selected-row" : "")}
-              >
-                <td>{stock.rank || "-"}</td>
-                <td>{stock.symbol}</td>
-                <td>{scoreText(stock.final_score)}</td>
-                <td>{scoreText(stock.technical_score)}</td>
-                <td>{scoreText(stock.fundamental_score)}</td>
-                <td>{scoreText(stock.inherited_macro_score)}</td>
-                <td>{finiteScore(stock.score_coverage_pct) ? `${stock.score_coverage_pct?.toFixed(1)}%` : "-"}</td>
-                <td><span className={`badge ${stock.score_status?.toLowerCase()}`}>{stock.score_status || "-"}</span></td>
-              </tr>
+            <tr
+              key={`${stock.rank}-${stock.symbol}`}
+              onClick={() => onStockSelect?.({ symbol: stock.symbol, horizon })}
+              style={onStockSelect ? { cursor: 'pointer' } : {}}
+              className={(onStockSelect ? "clickable-row" : "") + (stock.selected ? " selected-row" : "")}
+            >
+              <td>{stock.rank || "-"}</td>
+              <td>{stock.symbol}</td>
+              <td>{scoreText(stock.final_score)}</td>
+              <td>{scoreText(stock.technical_score)}</td>
+              <td>{scoreText(stock.fundamental_score)}</td>
+              <td>{scoreText(stock.inherited_macro_score)}</td>
+              <td>{finiteScore(stock.score_coverage_pct) ? `${stock.score_coverage_pct?.toFixed(1)}%` : "-"}</td>
+              <td><span className={`badge ${stock.score_status?.toLowerCase()}`}>{stock.score_status || "-"}</span></td>
+            </tr>
           ))}
         </tbody>
       </table>
