@@ -31,6 +31,7 @@ class DiscoveryGroupResult(BaseModel):
 
     name: str
     rank: Optional[int] = None
+    selected: bool = False
     final_score: Optional[float] = None
     technical_score: Optional[float] = None
     fundamental_score: Optional[float] = None
@@ -203,3 +204,23 @@ DiscoveryRunCreateResponse = Union[
     DiscoveryRunCreateSuccessResponse,
     DiscoveryResultErrorResponse,
 ]
+
+class DiscoveryRunSummaryItem(BaseModel):
+    name: str
+    rank: Optional[int] = None
+    final_score: Optional[float] = None
+
+class DiscoveryRunSummary(BaseModel):
+    run_id: str
+    status: str
+    run_date: Optional[str] = None
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    top_sectors: List[DiscoveryRunSummaryItem]
+    top_industries: List[DiscoveryRunSummaryItem]
+    top_basic_industries: List[DiscoveryRunSummaryItem]
+    top_stocks: List[DiscoveryRunSummaryItem]
+
+class DiscoveryRunsSummaryResponse(BaseModel):
+    success: bool
+    data: List[DiscoveryRunSummary]

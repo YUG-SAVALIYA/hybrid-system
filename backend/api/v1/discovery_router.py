@@ -23,6 +23,7 @@ from api.v1.discovery_models import (
     DiscoveryRunCreateRequest,
     DiscoveryRunCreateResponse,
     DiscoveryRunCreateSuccessResponse,
+    DiscoveryRunsSummaryResponse,
 )
 from database import DiscoverySessionLocal
 from services.discovery.discovery_pipeline_orchestrator import (
@@ -218,6 +219,25 @@ def create_discovery_run(
         )
 
     return _creation_response(row)
+
+
+@router.get(
+    "/runs",
+    response_model=DiscoveryRunsSummaryResponse,
+)
+def get_discovery_runs(
+    service: DiscoveryResultService = Depends(get_discovery_result_service),
+):
+    try:
+        summary = service.get_recent_runs_summary(limit=5)
+        return DiscoveryRunsSummaryResponse(success=True, data=summary)
+    except Exception:
+        logger.exception("Failed to load discovery runs summary")
+        return _error_response(
+            500,
+            "RUNS_SUMMARY_FAILED",
+            "The discovery runs summary could not be loaded.",
+        )
 
 
 @router.get(

@@ -36,6 +36,7 @@ type FlowState =
   | "CREATING_RUN"
   | "PREPARING_DATA"
   | "EXECUTING_DISCOVERY"
+  | "RUNNING"
   | "LOADING_RESULT"
   | "COMPLETED"
   | "COMPLETED_WITH_WARNINGS"
@@ -86,6 +87,7 @@ function statusFromResult(status?: string): FlowState {
   if (status === "COMPLETED_WITH_WARNINGS") return "COMPLETED_WITH_WARNINGS";
   if (status === "COMPLETED") return "COMPLETED";
   if (status === "FAILED") return "FAILED";
+  if (status === "RUNNING") return "RUNNING";
   return "IDLE";
 }
 
@@ -209,7 +211,10 @@ function buildHorizonView(result: DiscoveryResult | null, key: DiscoveryHorizon)
   return view;
 }
 
-function groupEmptyMessage(horizon: DiscoveryHorizon, result: DiscoveryResult | null, view: HorizonView) {
+function groupEmptyMessage(horizon: DiscoveryHorizon, result: DiscoveryResult | null, view: HorizonView, flowState: FlowState) {
+  if (["CREATING_RUN", "PREPARING_DATA", "EXECUTING_DISCOVERY", "LOADING_RESULT"].includes(flowState)) {
+    return "Pipeline is currently running. Please wait for results...";
+  }
   const data = result?.horizons[horizon];
   if (!data || data.status === "PENDING") return "Sector selection has not completed for this horizon.";
   return null;
@@ -260,21 +265,31 @@ function buildProcessLog(
   return items;
 }
 
-export function DiscoveryPage() {
+export function DiscoveryPage({ 
+  runId, 
+  activeTab, 
+  onGroupSelect, 
+  onStockSelect,
+  onRunCreated
+}: { 
+  runId?: string; 
+  activeTab?: string; 
+  onGroupSelect?: (group: {type: string, name: string, parentSector: string, parentIndustry: string, horizon: string}) => void;
+  onStockSelect?: (stock: {symbol: string, horizon: string}) => void;
+  onRunCreated?: (runId: string) => void;
+}) {
   const [flowState, setFlowState] = useState<FlowState>("IDLE");
   const [customRunId, setCustomRunId] = useState("");
-  const [existingRunId, setExistingRunId] = useState("");
-  const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [existingRunId, setExistingRunId] = useState(runId || "");
+  const [activeRunId, setActiveRunId] = useState<string | null>(runId || null);
   const [resumeExisting, setResumeExisting] = useState(true);
   const [forceRestartPreparation, setForceRestartPreparation] = useState<boolean>(false);
   const [forceRestartExecution, setForceRestartExecution] = useState<boolean>(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  
-  const [selectedGroup, setSelectedGroup] = useState<{type: string, name: string, parentSector: string, parentIndustry: string} | null>(null);
 
   const [activeHorizon, setActiveHorizon] = useState<DiscoveryHorizon>("SHORT");
   const [runHorizon, setRunHorizon] = useState<DiscoveryHorizon>("SHORT");
-  const [activeViewTab, setActiveViewTab] = useState<"SECTORS" | "INDUSTRIES" | "BASIC_INDUSTRIES" | "STOCKS">("SECTORS");
+  const activeViewTab = activeTab;
   const [result, setResult] = useState<DiscoveryResult | null>(null);
   const [preparationStages, setPreparationStages] = useState<Record<string, DiscoveryStageResult>>({});
   const [error, setError] = useState<DiscoveryApiError | null>(null);
@@ -298,7 +313,7 @@ export function DiscoveryPage() {
     [activeRunId, error, flowState, preparationStages, result]
   );
   const selectedHorizonView = useMemo(() => buildHorizonView(result, activeHorizon), [activeHorizon, result]);
-  const emptyMessage = groupEmptyMessage(activeHorizon, result, selectedHorizonView);
+  const emptyMessage = groupEmptyMessage(activeHorizon, result, selectedHorizonView, flowState);
 
   // Log warnings and errors to console instead of displaying in UI
   useEffect(() => {
@@ -334,6 +349,16 @@ export function DiscoveryPage() {
     []
   );
 
+  useEffect(() => {
+    if (runId && runId === activeRunId && flowState === "IDLE") {
+      loadResult(runId).catch(console.error);
+    } else if (runId && runId !== activeRunId) {
+      setActiveRunId(runId);
+      setExistingRunId(runId);
+      loadResult(runId).catch(console.error);
+    }
+  }, [runId, activeRunId, flowState, loadResult]);
+
   const handleApiError = useCallback(
     async (apiError: DiscoveryApiError, runId?: string | null, shouldLoadResult = false) => {
       setError(apiError);
@@ -367,6 +392,7 @@ export function DiscoveryPage() {
         controller.signal
       );
       setActiveRunId(created.run_id);
+      onRunCreated?.(created.run_id);
       setFlowState("PREPARING_DATA");
       const preparation = await prepareDiscoveryRun(
         created.run_id,
@@ -410,7 +436,8 @@ export function DiscoveryPage() {
     clearPolling();
     setError(null);
     try {
-      await loadResult(existingRunId.trim());
+      const loaded = await loadResult(existingRunId.trim());
+      onRunCreated?.(loaded.run_id);
     } catch (caught) {
       if (caught instanceof DiscoveryApiException) {
         await handleApiError(caught.apiError);
@@ -495,18 +522,22 @@ export function DiscoveryPage() {
 
   return (
     <main className="discovery-shell">
-      <header className="page-header">
-        <div>
-          <p className="eyebrow">Financial analytics</p>
-          <h1>Sector Discovery</h1>
-        </div>
-        <span className={`state-pill state-${flowState.toLowerCase()}`} aria-live="polite">
-          {flowState.replace(/_/g, " ")}
-        </span>
-      </header>
+      {!activeTab && (
+        <header className="page-header">
+          <div>
+            <p className="eyebrow">Financial analytics</p>
+            <h1>Sector Discovery</h1>
+          </div>
+          <span className={`state-pill state-${flowState.toLowerCase()}`} aria-live="polite">
+            {flowState.replace(/_/g, " ")}
+          </span>
+        </header>
+      )}
 
-      <section className="dashboard-grid">
-        <form className="panel run-panel" onSubmit={startDiscovery}>
+      {!activeTab && (
+        <section className="dashboard-grid">
+          {!runId && (
+          <form className="panel run-panel" onSubmit={startDiscovery}>
           <div className="panel-title">
             <h2>Run Controls</h2>
           {isBusy && <span className="spinner-label">Working...</span>}
@@ -588,6 +619,7 @@ export function DiscoveryPage() {
             </div>
           </details>
         </form>
+        )}
 
         <section className="panel progress-panel" aria-label="Pipeline progress">
           <div className="panel-title">
@@ -615,55 +647,38 @@ export function DiscoveryPage() {
           </ol>
         </section>
       </section>
+      )}
 
-      <section className="panel results-panel">
-        <div className="panel-title">
-          <h2>Horizon Results</h2>
-          <div className="tabs" role="tablist" aria-label="Discovery horizons">
-            {HORIZONS.map(({ key, label }) => (
-              <button
-                key={key}
-                role="tab"
-                type="button"
-                aria-selected={activeHorizon === key}
-                className={activeHorizon === key ? "tab active" : "tab"}
-                onClick={() => setActiveHorizon(key)}
-              >
-                {label}
-              </button>
-            ))}
+      {activeTab && (
+        <section className="panel results-panel">
+          <div className="panel-title">
+            <h2>Horizon Results</h2>
+            <div className="tabs" role="tablist" aria-label="Discovery horizons">
+              {HORIZONS.map(({ key, label }) => (
+                <button
+                  key={key}
+                  role="tab"
+                  type="button"
+                  aria-selected={activeHorizon === key}
+                  className={activeHorizon === key ? "tab active" : "tab"}
+                  onClick={() => setActiveHorizon(key)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
-
-        <div className="tabs" role="tablist" aria-label="Result Views" style={{ marginTop: '1rem', marginBottom: '1rem' }}>
-          <button role="tab" type="button" aria-selected={activeViewTab === "SECTORS"} className={activeViewTab === "SECTORS" ? "tab active" : "tab"} onClick={() => setActiveViewTab("SECTORS")}>Sectors</button>
-          <button role="tab" type="button" aria-selected={activeViewTab === "INDUSTRIES"} className={activeViewTab === "INDUSTRIES" ? "tab active" : "tab"} onClick={() => setActiveViewTab("INDUSTRIES")}>Industries</button>
-          <button role="tab" type="button" aria-selected={activeViewTab === "BASIC_INDUSTRIES"} className={activeViewTab === "BASIC_INDUSTRIES" ? "tab active" : "tab"} onClick={() => setActiveViewTab("BASIC_INDUSTRIES")}>Basic Industries</button>
-          <button role="tab" type="button" aria-selected={activeViewTab === "STOCKS"} className={activeViewTab === "STOCKS" ? "tab active" : "tab"} onClick={() => setActiveViewTab("STOCKS")}>Stocks</button>
-        </div>
-
-        {emptyMessage ? (
-          <div className="empty-state">{emptyMessage}</div>
-        ) : (
-          <div className="result-content">
-            {activeViewTab === "SECTORS" && <GroupTable title="Sectors" groups={selectedHorizonView.sectors} onRowClick={(name, ps, pi) => setSelectedGroup({type: 'SECTOR', name, parentSector: ps, parentIndustry: pi})} />}
-            {activeViewTab === "INDUSTRIES" && <GroupTable title="Industries" groups={selectedHorizonView.industries} showParentSector={true} onRowClick={(name, ps, pi) => setSelectedGroup({type: 'INDUSTRY', name, parentSector: ps, parentIndustry: pi})} />}
-            {activeViewTab === "BASIC_INDUSTRIES" && <GroupTable title="Basic Industries" groups={selectedHorizonView.basicIndustries} showParentSector={true} showParentIndustry={true} onRowClick={(name, ps, pi) => setSelectedGroup({type: 'BASIC_INDUSTRY', name, parentSector: ps, parentIndustry: pi})} />}
-            {activeViewTab === "STOCKS" && <StocksTable stocks={selectedHorizonView.stocks} />}
-          </div>
-        )}
-      </section>
-
-      {selectedGroup && activeRunId && (
-        <ConstituentsModal
-          runId={activeRunId}
-          horizon={activeHorizon}
-          entityType={selectedGroup.type}
-          entityName={selectedGroup.name}
-          parentSector={selectedGroup.parentSector}
-          parentIndustry={selectedGroup.parentIndustry}
-          onClose={() => setSelectedGroup(null)}
-        />
+          {emptyMessage ? (
+            <div className="empty-state">{emptyMessage}</div>
+          ) : (
+            <div className="result-content">
+              {activeViewTab === "SECTORS" && <GroupTable title="Sectors" groups={selectedHorizonView.sectors} onRowClick={(name, ps, pi) => onGroupSelect?.({type: 'SECTOR', name, parentSector: ps, parentIndustry: pi, horizon: activeHorizon})} />}
+              {activeViewTab === "INDUSTRIES" && <GroupTable title="Industries" groups={selectedHorizonView.industries} showParentSector={true} onRowClick={(name, ps, pi) => onGroupSelect?.({type: 'INDUSTRY', name, parentSector: ps, parentIndustry: pi, horizon: activeHorizon})} />}
+              {activeViewTab === "BASIC_INDUSTRIES" && <GroupTable title="Basic Industries" groups={selectedHorizonView.basicIndustries} showParentSector={true} showParentIndustry={true} onRowClick={(name, ps, pi) => onGroupSelect?.({type: 'BASIC_INDUSTRY', name, parentSector: ps, parentIndustry: pi, horizon: activeHorizon})} />}
+              {activeViewTab === "STOCKS" && activeRunId && <StocksTable runId={activeRunId} horizon={activeHorizon} stocks={selectedHorizonView.stocks} onStockSelect={onStockSelect} />}
+            </div>
+          )}
+        </section>
       )}
     </main>
   );
@@ -708,7 +723,7 @@ function GroupTable({
               key={`${group.rank}-${group.name}`}
               onClick={() => onRowClick && onRowClick(group.name, group.parent_sector || '', group.parent_industry || '')}
               style={onRowClick ? { cursor: 'pointer' } : {}}
-              className={onRowClick ? "clickable-row" : ""}
+              className={(onRowClick ? "clickable-row" : "") + (group.selected ? " selected-row" : "")}
             >
               <td>{group.rank || "-"}</td>
               <td>{group.name}</td>
@@ -729,9 +744,20 @@ function GroupTable({
   );
 }
 
-function StocksTable({ stocks }: { stocks: DiscoveryStockResult[] }) {
+function StocksTable({ 
+  runId, 
+  horizon, 
+  stocks, 
+  onStockSelect 
+}: { 
+  runId: string; 
+  horizon: string; 
+  stocks: DiscoveryStockResult[];
+  onStockSelect?: (stock: {symbol: string, horizon: string}) => void;
+}) {
   if (!stocks.length) return <div className="empty-state">No stocks found.</div>;
   const sorted = [...stocks].sort((a, b) => (a.rank || 9999) - (b.rank || 9999));
+  
   return (
     <div className="table-wrap">
       <table>
@@ -750,202 +776,24 @@ function StocksTable({ stocks }: { stocks: DiscoveryStockResult[] }) {
         </thead>
         <tbody>
           {sorted.map((stock) => (
-            <tr key={`${stock.rank}-${stock.symbol}`}>
-              <td>{stock.rank || "-"}</td>
-              <td>{stock.symbol}</td>
-              <td>{scoreText(stock.final_score)}</td>
-              <td>{scoreText(stock.technical_score)}</td>
-              <td>{scoreText(stock.fundamental_score)}</td>
-              <td>{scoreText(stock.inherited_macro_score)}</td>
-              <td>{finiteScore(stock.score_coverage_pct) ? `${stock.score_coverage_pct?.toFixed(1)}%` : "-"}</td>
-              <td><span className={`badge ${stock.score_status?.toLowerCase()}`}>{stock.score_status || "-"}</span></td>
-            </tr>
+              <tr 
+                key={`${stock.rank}-${stock.symbol}`}
+                onClick={() => onStockSelect?.({ symbol: stock.symbol, horizon })} 
+                style={onStockSelect ? { cursor: 'pointer' } : {}} 
+                className={(onStockSelect ? "clickable-row" : "") + (stock.selected ? " selected-row" : "")}
+              >
+                <td>{stock.rank || "-"}</td>
+                <td>{stock.symbol}</td>
+                <td>{scoreText(stock.final_score)}</td>
+                <td>{scoreText(stock.technical_score)}</td>
+                <td>{scoreText(stock.fundamental_score)}</td>
+                <td>{scoreText(stock.inherited_macro_score)}</td>
+                <td>{finiteScore(stock.score_coverage_pct) ? `${stock.score_coverage_pct?.toFixed(1)}%` : "-"}</td>
+                <td><span className={`badge ${stock.score_status?.toLowerCase()}`}>{stock.score_status || "-"}</span></td>
+              </tr>
           ))}
         </tbody>
       </table>
-    </div>
-  );
-}
-
-function ConstituentsModal({
-  runId,
-  horizon,
-  entityType,
-  entityName,
-  parentSector,
-  parentIndustry,
-  onClose
-}: {
-  runId: string;
-  horizon: string;
-  entityType: string;
-  entityName: string;
-  parentSector: string;
-  parentIndustry: string;
-  onClose: () => void;
-}) {
-  const [constituents, setConstituents] = useState<Constituent[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
-
-  const toggleRow = (symbol: string) => {
-    setExpandedRows(prev => {
-      const next = new Set(prev);
-      if (next.has(symbol)) next.delete(symbol);
-      else next.add(symbol);
-      return next;
-    });
-  };
-
-  useEffect(() => {
-    let active = true;
-    const fetchConstituents = async () => {
-      setLoading(true);
-      try {
-        const url = `/api/v1/discovery/runs/${runId}/constituents?horizon=${horizon}&entity_type=${entityType}&entity_name=${encodeURIComponent(entityName)}&parent_sector=${encodeURIComponent(parentSector)}&parent_industry=${encodeURIComponent(parentIndustry)}`;
-        const res = await fetch(url);
-        const data = await res.json();
-        if (active && data.success) {
-          setConstituents(data.data);
-        }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
-    fetchConstituents();
-    return () => { active = false; };
-  }, [runId, horizon, entityType, entityName, parentSector, parentIndustry]);
-
-  return (
-    <div className="modal-overlay" onClick={onClose} style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-      <div className="modal-content panel" onClick={(e) => e.stopPropagation()} style={{ background: '#1c1c1e', padding: '20px', borderRadius: '8px', width: '90vw', maxWidth: '1000px', maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', border: '1px solid #3a3a3c' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-          <h2>{entityName} Constituents</h2>
-          <button onClick={onClose} className="secondary" style={{ padding: '4px 8px' }}>Close</button>
-        </div>
-        
-        {loading ? (
-          <div className="empty-state">Loading constituents...</div>
-        ) : constituents.length === 0 ? (
-          <div className="empty-state">No constituents found.</div>
-        ) : (
-          <div className="table-wrap" style={{ overflowY: 'auto' }}>
-            <table>
-              <thead>
-                <tr>
-                  <th style={{ width: '40px' }}></th>
-                  <th>Symbol</th>
-                  <th>Sector</th>
-                  <th>Industry</th>
-                  <th>Technical Score</th>
-                  <th>Fundamental Score</th>
-                </tr>
-              </thead>
-              <tbody>
-                {constituents.map((c) => (
-                  <Fragment key={c.symbol}>
-                    <tr onClick={() => toggleRow(c.symbol)} style={{ cursor: 'pointer' }} className="clickable-row">
-                      <td style={{ textAlign: 'center' }}>{expandedRows.has(c.symbol) ? '−' : '+'}</td>
-                      <td>{c.symbol}</td>
-                      <td>{c.sector}</td>
-                      <td>{c.industry}</td>
-                      <td>{c.technical_score !== null ? c.technical_score.toFixed(1) : "-"}</td>
-                      <td>{c.fundamental_score !== null ? c.fundamental_score.toFixed(1) : "-"}</td>
-                    </tr>
-                    {expandedRows.has(c.symbol) && (
-                      <tr>
-                        <td colSpan={6} style={{ padding: '0' }}>
-                          <ConstituentDetails constituent={c} />
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function ConstituentDetails({ constituent: c }: { constituent: Constituent }) {
-  const tech = c.tech_details;
-  const fund = c.fund_details;
-
-  return (
-    <div style={{ padding: '16px', background: '#252528', display: 'flex', gap: '24px', flexWrap: 'wrap', borderBottom: '1px solid #3a3a3c' }}>
-      <div style={{ flex: '1 1 300px' }}>
-        <h4 style={{ margin: '0 0 12px 0', color: '#4da6ff' }}>Technical Details</h4>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.9rem' }}>
-          <span style={{ color: '#888' }}>Company Return:</span>
-          <span style={{ fontWeight: 600, color: (c.company_return || 0) >= 0 ? '#4caf50' : '#f44336' }}>
-            {c.company_return != null ? c.company_return.toFixed(2) + '%' : '-'}
-          </span>
-          
-          <span style={{ color: '#888' }}>Benchmark Return:</span>
-          <span>{c.benchmark_return != null ? c.benchmark_return.toFixed(2) + '%' : '-'}</span>
-          
-          <span style={{ color: '#888' }}>Volume Change:</span>
-          <span>{tech?.technical_score?.components?.volume?.score?.toFixed(1) || '-'} pts</span>
-
-          <span style={{ color: '#888' }}>Consistency Score:</span>
-          <span>{tech?.technical_score?.components?.consistency?.score?.toFixed(1) || '-'} pts</span>
-          
-          <span style={{ color: '#888' }}>Pos. Periods / Valid:</span>
-          <span>
-            {tech?.consistency?.positive_periods ?? '-'}/{tech?.consistency?.valid_periods ?? '-'}
-          </span>
-
-          <span style={{ color: '#888' }}>Outperformed Periods:</span>
-          <span>
-            {tech?.consistency?.outperforming_periods ?? '-'}/{tech?.consistency?.valid_periods ?? '-'}
-          </span>
-        </div>
-      </div>
-      
-      <div style={{ flex: '1 1 400px' }}>
-        <h4 style={{ margin: '0 0 12px 0', color: '#ffd54f' }}>Fundamental Details</h4>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.9rem' }}>
-          <span style={{ color: '#888' }}>Sales Growth:</span>
-          <span style={{ fontWeight: 600, color: (fund?.fundamental_scoring?.growth?.sales_growth?.company_value || 0) >= 0 ? '#4caf50' : '#f44336' }}>
-            {fund?.fundamental_scoring?.growth?.sales_growth?.company_value != null ? fund.fundamental_scoring.growth.sales_growth.company_value.toFixed(2) + '%' : '-'}
-          </span>
-          
-          <span style={{ color: '#888' }}>Operating Margin:</span>
-          <span style={{ fontWeight: 600 }}>
-            {fund?.fundamental_scoring?.profitability?.operating_margin?.company_value != null ? fund.fundamental_scoring.profitability.operating_margin.company_value.toFixed(2) + '%' : '-'}
-          </span>
-          
-          <span style={{ color: '#888' }}>Margin Trend (Change):</span>
-          <span>
-            {fund?.fundamental_scoring?.profitability?.margin_trend?.company_value != null ? fund.fundamental_scoring.profitability.margin_trend.company_value.toFixed(2) + ' pp' : '-'}
-          </span>
-          
-          <span style={{ color: '#888' }}>Debt to Equity:</span>
-          <span>
-            {fund?.fundamental_scoring?.financial_strength?.debt_to_equity?.company_value != null ? fund.fundamental_scoring.financial_strength.debt_to_equity.company_value.toFixed(2) : '-'}
-          </span>
-          
-          <span style={{ color: '#888' }}>Borrowing Change:</span>
-          <span>
-            {fund?.fundamental_scoring?.financial_strength?.borrowing_trend?.company_value != null ? fund.fundamental_scoring.financial_strength.borrowing_trend.company_value.toFixed(2) + '%' : '-'}
-          </span>
-
-          <span style={{ color: '#888' }}>OCF to PAT:</span>
-          <span>
-            {fund?.fundamental_scoring?.earnings_quality?.latest_cash_conversion?.company_value != null ? fund.fundamental_scoring.earnings_quality.latest_cash_conversion.company_value.toFixed(2) : '-'}
-          </span>
-          
-          <span style={{ color: '#888' }}>Positive PAT Ratio:</span>
-          <span>
-            {fund?.fundamental_scoring?.earnings_quality?.profit_history?.positive_pat_period_ratio != null ? fund.fundamental_scoring.earnings_quality.profit_history.positive_pat_period_ratio.toFixed(1) + '%' : '-'}
-          </span>
-        </div>
-      </div>
     </div>
   );
 }

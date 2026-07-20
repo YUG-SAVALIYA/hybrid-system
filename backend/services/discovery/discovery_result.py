@@ -16,6 +16,7 @@ from models.discovery import (
     EligibleUniverseSnapshot,
     CompanyTechnicalMetric,
     CompanyFundamentalMetric,
+    MacroEntityImpact,
 )
 
 
@@ -77,6 +78,74 @@ LEGACY_DISPLAY_STAGE_BY_HORIZON = {
 class DiscoveryResultService:
     def __init__(self, discovery_session: Session):
         self._disc = discovery_session
+
+    def get_recent_runs_summary(self, limit: int = 5) -> List[Dict[str, Any]]:
+        runs = (
+            self._disc.query(DiscoveryRun)
+            .filter(DiscoveryRun.status != "PENDING")
+            .order_by(DiscoveryRun.run_date.desc(), DiscoveryRun.started_at.desc())
+            .limit(limit)
+            .all()
+        )
+        if not runs:
+            return []
+
+        # We need top 3 selections per entity_type for these runs.
+        run_ids = [run.id for run in runs]
+        
+        # Load selections
+        selections = (
+            self._disc.query(DiscoverySelection)
+            .filter(
+                DiscoverySelection.run_id.in_(run_ids),
+                DiscoverySelection.selected == True,
+                DiscoverySelection.horizon == "SHORT", # Assuming SHORT for dashboard
+            )
+            .all()
+        )
+        
+        # Group by run_id
+        summary_by_run = {}
+        for run in runs:
+            summary_by_run[run.id] = {
+                "run_id": run.id,
+                "status": run.status or "UNKNOWN",
+                "run_date": run.run_date,
+                "started_at": _format_dt(run.started_at),
+                "completed_at": _format_dt(run.completed_at),
+                "top_sectors": [],
+                "top_industries": [],
+                "top_basic_industries": [],
+                "top_stocks": [],
+            }
+            
+        for sel in selections:
+            run_id = sel.run_id
+            if run_id not in summary_by_run:
+                continue
+            
+            # Sort into the correct bucket if rank is <= 3
+            if (sel.rank or 9999) <= 3:
+                item = {
+                    "name": sel.entity_name or sel.symbol,
+                    "rank": sel.rank,
+                    "final_score": None, # Could join with scores, but let's keep it simple or just leave null
+                }
+                if sel.entity_type == ENTITY_SECTOR:
+                    summary_by_run[run_id]["top_sectors"].append(item)
+                elif sel.entity_type == ENTITY_INDUSTRY:
+                    summary_by_run[run_id]["top_industries"].append(item)
+                elif sel.entity_type == ENTITY_BASIC_INDUSTRY:
+                    summary_by_run[run_id]["top_basic_industries"].append(item)
+                elif sel.entity_type == ENTITY_STOCK:
+                    summary_by_run[run_id]["top_stocks"].append(item)
+
+        # Sort the items in each run by rank
+        for run_id in summary_by_run:
+            for key in ["top_sectors", "top_industries", "top_basic_industries", "top_stocks"]:
+                summary_by_run[run_id][key].sort(key=lambda x: x["rank"] or 9999)
+
+        return [summary_by_run[run.id] for run in runs]
 
     def get_result(self, run_id: str) -> Dict[str, Any]:
         run = self._disc.query(DiscoveryRun).filter_by(id=run_id).first()
@@ -144,7 +213,6 @@ class DiscoveryResultService:
             self._disc.query(DiscoverySelection)
             .filter(
                 DiscoverySelection.run_id == run_id,
-                DiscoverySelection.selected == True,
             )
             .order_by(
                 DiscoverySelection.horizon.asc(),
@@ -246,7 +314,7 @@ class DiscoveryResultService:
         industry_selections = selections.get(ENTITY_INDUSTRY, [])
         industries = []
         for sel in industry_selections:
-            if any((sel.parent_sector or "") == s_sel.entity_name for s_sel in sector_selections):
+            if any((sel.parent_sector or "") == s_sel.entity_name and s_sel.selected for s_sel in sector_selections):
                 payload = self._group_payload(horizon, ENTITY_INDUSTRY, sel, group_scores, warnings)
                 if payload:
                     industries.append(payload)
@@ -256,7 +324,7 @@ class DiscoveryResultService:
         basic_selections = selections.get(ENTITY_BASIC_INDUSTRY, [])
         basic_industries = []
         for sel in basic_selections:
-            if any((sel.parent_industry or "") == i_sel.entity_name for i_sel in industry_selections):
+            if any((sel.parent_industry or "") == i_sel.entity_name and i_sel.selected for i_sel in industry_selections):
                 payload = self._group_payload(horizon, ENTITY_BASIC_INDUSTRY, sel, group_scores, warnings)
                 if payload:
                     basic_industries.append(payload)
@@ -273,7 +341,7 @@ class DiscoveryResultService:
         )
         for stock_selection in stock_rows:
             # Note: We just check if it matches ANY selected basic industry
-            if any((stock_selection.basic_industry or "") == b_sel.entity_name for b_sel in basic_selections):
+            if any((stock_selection.basic_industry or "") == b_sel.entity_name and b_sel.selected for b_sel in basic_selections):
                 snapshot = stock_snapshots.get((horizon, stock_selection.company_id or ""))
                 if snapshot is None:
                     warnings.append(W_STOCK_SNAPSHOT_UNAVAILABLE)
@@ -335,6 +403,7 @@ class DiscoveryResultService:
         payload = {
             "name": group.entity_name,
             "rank": group.rank,
+            "selected": selection.selected,
             "final_score": group.final_score,
             "technical_score": group.technical_score,
             "fundamental_score": group.fundamental_score,
@@ -430,7 +499,8 @@ class DiscoveryResultService:
         query = self._disc.query(
             EligibleUniverseSnapshot,
             CompanyTechnicalMetric,
-            CompanyFundamentalMetric
+            CompanyFundamentalMetric,
+            StockCandidateSnapshot
         ).join(
             CompanyTechnicalMetric,
             (EligibleUniverseSnapshot.source_company_id == CompanyTechnicalMetric.source_company_id) &
@@ -441,6 +511,12 @@ class DiscoveryResultService:
             CompanyFundamentalMetric,
             (EligibleUniverseSnapshot.source_company_id == CompanyFundamentalMetric.source_company_id) &
             (EligibleUniverseSnapshot.run_id == CompanyFundamentalMetric.run_id),
+            isouter=True
+        ).join(
+            StockCandidateSnapshot,
+            (EligibleUniverseSnapshot.symbol == StockCandidateSnapshot.symbol) &
+            (EligibleUniverseSnapshot.run_id == StockCandidateSnapshot.run_id) &
+            (StockCandidateSnapshot.horizon == horizon),
             isouter=True
         ).filter(
             EligibleUniverseSnapshot.run_id == run_id,
@@ -459,12 +535,68 @@ class DiscoveryResultService:
                 query = query.filter(EligibleUniverseSnapshot.sector == parent_sector)
             if parent_industry:
                 query = query.filter(EligibleUniverseSnapshot.industry == parent_industry)
+        elif entity_type == ENTITY_STOCK:
+            query = query.filter(EligibleUniverseSnapshot.symbol == entity_name)
         else:
             return []
 
         results = query.all()
         constituents = []
-        for uni, tech, fund in results:
+        macro_cache = {}
+        for uni, tech, fund, stock_cand in results:
+            macro_impact = None
+            
+            hierarchy = []
+            if stock_cand and stock_cand.score_details:
+                macro_comp = stock_cand.score_details.get("components", {}).get("macro", {})
+                st = macro_comp.get("source_entity_type")
+                sn = macro_comp.get("source_entity_name")
+                if st and sn:
+                    hierarchy.append((st, sn))
+                    
+            if uni.basic_industry:
+                hierarchy.append((ENTITY_BASIC_INDUSTRY, uni.basic_industry))
+            if uni.industry:
+                hierarchy.append((ENTITY_INDUSTRY, uni.industry))
+            if uni.sector:
+                hierarchy.append((ENTITY_SECTOR, uni.sector))
+                
+            # Remove duplicates while preserving order
+            seen = set()
+            unique_hierarchy = []
+            for item in hierarchy:
+                if item not in seen:
+                    seen.add(item)
+                    unique_hierarchy.append(item)
+
+            for h_type, h_name in unique_hierarchy:
+                cache_key = (h_type, h_name)
+                if cache_key not in macro_cache:
+                    impact_q = self._disc.query(MacroEntityImpact).filter_by(
+                        run_id=run_id,
+                        horizon=horizon,
+                        entity_type=h_type,
+                        entity_name=h_name
+                    )
+                    if h_type == ENTITY_INDUSTRY:
+                        impact_q = impact_q.filter_by(parent_sector=uni.sector)
+                    elif h_type == ENTITY_BASIC_INDUSTRY:
+                        impact_q = impact_q.filter_by(parent_sector=uni.sector, parent_industry=uni.industry)
+                    
+                    impact = impact_q.first()
+                    if impact:
+                        macro_cache[cache_key] = {
+                            "category_impacts": impact.category_impacts,
+                            "overall_impact": impact.overall_impact,
+                            "reason": impact.reason,
+                        }
+                    else:
+                        macro_cache[cache_key] = None
+                        
+                macro_impact = macro_cache[cache_key]
+                if macro_impact:
+                    break
+
             constituents.append({
                 "symbol": uni.symbol,
                 "name": uni.source_company_id, # Can map to name if available, but usually symbol is used
@@ -479,6 +611,8 @@ class DiscoveryResultService:
                 "fundamental_score": fund.final_fundamental_score if fund else None,
                 "fundamental_status": fund.fundamental_status if fund else None,
                 "fund_details": fund.calculation_details if fund else None,
+                "inherited_macro_score": stock_cand.inherited_macro_score if stock_cand else None,
+                "macro_impact": macro_impact,
                 "market_cap": uni.market_cap
             })
 

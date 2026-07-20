@@ -46,6 +46,7 @@ export interface DiscoveryRunCreateData {
 export interface DiscoveryGroupResult {
   name: string;
   rank?: number | null;
+  selected?: boolean;
   constituent_count?: number | null;
   final_score?: number | null;
   technical_score?: number | null;
@@ -205,6 +206,34 @@ export function getDiscoveryResult(
 ): Promise<DiscoveryResult> {
   return request<DiscoveryResult>(
     `/discovery/runs/${encodeURIComponent(runId)}/result`,
+    { method: "GET" },
+    signal
+  );
+}
+
+export interface DiscoveryRunSummaryItem {
+  name: string;
+  rank?: number | null;
+  final_score?: number | null;
+}
+
+export interface DiscoveryRunSummary {
+  run_id: string;
+  status: string;
+  run_date?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  top_sectors: DiscoveryRunSummaryItem[];
+  top_industries: DiscoveryRunSummaryItem[];
+  top_basic_industries: DiscoveryRunSummaryItem[];
+  top_stocks: DiscoveryRunSummaryItem[];
+}
+
+export function getRecentDiscoveryRuns(
+  signal?: AbortSignal
+): Promise<DiscoveryRunSummary[]> {
+  return request<DiscoveryRunSummary[]>(
+    "/discovery/runs",
     { method: "GET" },
     signal
   );

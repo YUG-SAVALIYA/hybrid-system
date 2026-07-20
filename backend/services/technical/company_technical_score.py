@@ -42,11 +42,9 @@ def _status_from_score(score: Optional[float]) -> str:
 def _return_score(row: CompanyTechnicalMetric) -> Optional[float]:
     if row.return_available is not True or not _is_finite(row.relative_return):
         return None
-    if row.relative_return > 0:
-        return 100.0
-    if row.relative_return < 0:
-        return 0.0
-    return 50.0
+    scale = getattr(config, "RELATIVE_RETURN_FULL_SCALE_PCT", 10.0)
+    score = 50.0 + (row.relative_return / scale) * 50.0
+    return max(0.0, min(100.0, score))
 
 
 def _volume_score(row: CompanyTechnicalMetric) -> Optional[float]:
@@ -54,11 +52,17 @@ def _volume_score(row: CompanyTechnicalMetric) -> Optional[float]:
         return None
     if not _is_finite(row.company_return):
         return None
-    if row.company_return > 0 and row.volume_change > 0:
-        return 100.0
-    if row.company_return < 0 and row.volume_change > 0:
-        return 0.0
-    return 50.0
+        
+    scale = getattr(config, "VOLUME_CHANGE_FULL_SCALE_PCT", 50.0)
+    
+    if row.company_return > 0:
+        score = 50.0 + (row.volume_change / scale) * 50.0
+    elif row.company_return < 0:
+        score = 50.0 - (row.volume_change / scale) * 50.0
+    else:
+        score = 50.0
+        
+    return max(0.0, min(100.0, score))
 
 
 def _consistency_score(row: CompanyTechnicalMetric) -> Optional[float]:
