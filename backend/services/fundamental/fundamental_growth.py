@@ -169,7 +169,17 @@ class FundamentalGrowthService:
                 ))
                 rec.calculation_details = existing_calc
             else:
-                # Company was not in the universe snapshot (missing tech data) — skip
-                continue
+                new_rec = CompanyFundamentalMetric(
+                    id=str(uuid.uuid4()),
+                    run_id=run_id,
+                    source_company_id=str(cid),
+                    symbol=s.get("symbol", ""),
+                    sector=hi.get("sector", ""),
+                    industry=hi.get("industry", ""),
+                    basic_industry=hi.get("basic_industry", ""),
+                    calculation_details={"growth": growth_detail, "warnings": unique_warnings},
+                )
+                self._disc.add(new_rec)
+                existing_map[str(cid)] = new_rec
 
         self._disc.commit()

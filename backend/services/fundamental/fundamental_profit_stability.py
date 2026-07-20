@@ -6,7 +6,6 @@ Calculates raw company profit-stability metrics based on historical net profit.
 from __future__ import annotations
 
 import logging
-import uuid
 import math
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -220,7 +219,6 @@ class FundamentalProfitStabilityService:
             }
 
             values_to_upsert.append({
-                "id": str(uuid.uuid4()),
                 "run_id": run_id,
                 "source_company_id": source_comp_id,
                 "symbol": r.symbol,
@@ -257,16 +255,6 @@ class FundamentalProfitStabilityService:
                 
                 rec.calculation_details = existing_calc
             else:
-                new_rec = CompanyFundamentalMetric(
-                    id=v["id"],
-                    run_id=v["run_id"],
-                    source_company_id=v["source_company_id"],
-                    symbol=v["symbol"],
-                    sector=v["sector"],
-                    industry=v["industry"],
-                    basic_industry=v["basic_industry"],
-                    calculation_details=v["calculation_details"]
-                )
-                self._disc.add(new_rec)
+                continue
         
         self._disc.commit()
