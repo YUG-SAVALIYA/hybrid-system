@@ -407,7 +407,7 @@ const resumePreparation = async () => {
 
   return (
     <main className="discovery-shell">
-      {!activeTab && (
+      {!routeRunId && (
         <header className="dashboard-hero" style={{ gridTemplateColumns: 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div className="hero-copy">
             <p className="eyebrow">Financial analytics</p>

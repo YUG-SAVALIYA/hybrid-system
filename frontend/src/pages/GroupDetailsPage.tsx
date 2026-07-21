@@ -112,10 +112,10 @@ export function GroupDetailsPage() {
   return (
     <div className="discovery-shell">
       <header className="dashboard-hero" style={{ gridTemplateColumns: 'none', display: 'flex', gap: '20px', alignItems: 'center' }}>
-        <button onClick={onBack} className="secondary" style={{ padding: '8px 18px', height: '40px', flexShrink: 0 }}>&larr; Back</button>
+        <button onClick={() => navigate(-1)} className="secondary" style={{ padding: '8px 18px', height: '40px', flexShrink: 0 }}>&larr; Back</button>
         <div className="hero-copy">
-          <p className="eyebrow">{group.type.replace('_', ' ')} CONSTITUENTS</p>
-          <h1 style={{ marginBottom: 0 }}>{group.name}</h1>
+          <p className="eyebrow">{(type || '').replace('_', ' ')} CONSTITUENTS</p>
+          <h1 style={{ marginBottom: 0 }}>{name}</h1>
         </div>
       </header>
       
