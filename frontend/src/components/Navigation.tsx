@@ -27,10 +27,10 @@ export function Navigation() {
   const onTabChange = (key: TabName) => {
     if (key === "DASHBOARD") navigate("/");
     else if (key === "PIPELINE") navigate("/new");
-    else if (runId && key === "SECTORS") navigate(`/discovery/${runId}/SECTOR`);
-    else if (runId && key === "INDUSTRIES") navigate(`/discovery/${runId}/INDUSTRY`);
-    else if (runId && key === "BASIC_INDUSTRIES") navigate(`/discovery/${runId}/BASIC_INDUSTRY`);
-    else if (runId && key === "STOCKS") navigate(`/discovery/${runId}/STOCK`);
+    else if (runId && key === "SECTORS") navigate(`/discovery/${runId}/SECTORS`);
+    else if (runId && key === "INDUSTRIES") navigate(`/discovery/${runId}/INDUSTRIES`);
+    else if (runId && key === "BASIC_INDUSTRIES") navigate(`/discovery/${runId}/BASIC_INDUSTRIES`);
+    else if (runId && key === "STOCKS") navigate(`/discovery/${runId}/STOCKS`);
   };
   const tabs: { key: TabName; label: string }[] = [
     { key: "DASHBOARD", label: "Dashboard" },
