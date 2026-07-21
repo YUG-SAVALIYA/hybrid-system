@@ -19,20 +19,25 @@ export function Navigation({
   ];
 
   return (
-    <nav style={{ padding: '16px 20px', background: 'var(--surface-2)', borderBottom: '1px solid var(--border)', display: 'flex', gap: '16px', alignItems: 'center' }}>
-      <h1 style={{ margin: '0 24px 0 0', fontSize: '1.2rem', color: 'var(--accent)' }}>Discovery System</h1>
-      <div className="tabs" role="tablist">
+    <nav className="app-nav">
+      <div className="nav-brand">
+        <div className="brand-logo">📊</div>
+        <div>
+          <div className="brand-title">Discovery Engine</div>
+          <div className="brand-subtitle">AI Powered Market Intelligence</div>
+        </div>
+      </div>
+
+      <div className="nav-tabs">
         {tabs.map(({ key, label }) => {
           const disabled = !runSelected && key !== "DASHBOARD" && key !== "PIPELINE";
           return (
             <button
               key={key}
-              role="tab"
               type="button"
-              aria-selected={activeTab === key}
-              className={`tab ${activeTab === key ? "active" : ""}`}
+              className={`nav-tab ${activeTab === key ? "active" : ""}`}
               onClick={() => !disabled && onTabChange(key)}
-              style={disabled ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+              style={disabled ? { opacity: 0.45, cursor: 'not-allowed' } : {}}
               title={disabled ? "Select a run from the Dashboard first" : ""}
             >
               {label}

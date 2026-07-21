@@ -24,13 +24,13 @@ export function DashboardPage({ onRunSelect, onNewRun }: { onRunSelect: (runId: 
 
   return (
     <div className="discovery-shell">
-      <header className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
+      <header className="dashboard-hero">
+        <div className="hero-copy">
           <p className="eyebrow">Overview</p>
-          <h1>Recent Discovery Runs</h1>
+          <h1 style={{ marginBottom: 0 }}>Recent Discovery Runs</h1>
         </div>
-        <button className="primary" onClick={onNewRun} style={{ padding: '10px 24px', fontSize: '1rem' }}>
-          Run Pipeline
+        <button className="primary" onClick={onNewRun} style={{ padding: '10px 28px', fontSize: '0.95rem' }}>
+          + Run Pipeline
         </button>
       </header>
 
