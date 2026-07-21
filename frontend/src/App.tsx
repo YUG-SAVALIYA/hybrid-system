@@ -1,10 +1,10 @@
 // @ts-check
-import { useState } from "react";
 import { DashboardPage } from "./pages/DashboardPage";
 import { DiscoveryPage } from "./pages/DiscoveryPage";
-import { Navigation, TabName } from "./components/Navigation";
+import { Navigation } from "./components/Navigation";
 import { GroupDetailsPage } from "./pages/GroupDetailsPage";
 import { StockDetailsPage } from "./pages/StockDetailsPage";
+import { Routes, Route } from "react-router-dom";
 
 export type GroupViewParams = {
   type: string;
@@ -20,82 +20,19 @@ export type StockViewParams = {
 };
 
 export function App() {
-  const [activeTab, setActiveTab] = useState<TabName>("DASHBOARD");
-  const [activeRunId, setActiveRunId] = useState<string | null>(null);
-  const [activeGroup, setActiveGroup] = useState<GroupViewParams | null>(null);
-  const [activeStock, setActiveStock] = useState<StockViewParams | null>(null);
-
-  const handleRunSelect = (runId: string) => {
-    setActiveRunId(runId);
-    setActiveTab("SECTORS");
-    setActiveGroup(null);
-    setActiveStock(null);
-  };
-
-  const handleTabChange = (tab: TabName) => {
-    setActiveTab(tab);
-    setActiveGroup(null);
-    setActiveStock(null);
-  };
-
-  const handleBackToGroup = () => {
-    setActiveStock(null);
-  };
-
-  const handleBackToDiscovery = () => {
-    setActiveGroup(null);
-    setActiveStock(null);
-  };
-
   return (
     <div className="app-container" style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
-      <Navigation 
-        activeTab={activeTab} 
-        onTabChange={handleTabChange} 
-        runSelected={activeRunId !== null} 
-      />
+      <Navigation />
       
       <div className="page-content" style={{ flex: 1, overflowY: 'auto' }}>
-        {activeTab === "DASHBOARD" && !activeGroup && !activeStock && (
-          <DashboardPage 
-            onRunSelect={handleRunSelect} 
-            onNewRun={() => setActiveTab("PIPELINE")}
-          />
-        )}
-        
-        {activeTab === "PIPELINE" && !activeGroup && !activeStock && (
-          <DiscoveryPage 
-            onRunCreated={(newRunId: string) => {
-              setActiveRunId(newRunId);
-            }}
-          />
-        )}
-
-        {activeTab !== "DASHBOARD" && activeTab !== "PIPELINE" && activeRunId && !activeGroup && !activeStock && (
-          <DiscoveryPage 
-            runId={activeRunId} 
-            activeTab={activeTab} 
-            onGroupSelect={(group: GroupViewParams) => setActiveGroup(group)}
-            onStockSelect={(stock: StockViewParams) => setActiveStock(stock)}
-          />
-        )}
-
-        {activeGroup && !activeStock && activeRunId && (
-          <GroupDetailsPage 
-            runId={activeRunId}
-            group={activeGroup}
-            onBack={handleBackToDiscovery}
-            onStockSelect={(stock: StockViewParams) => setActiveStock(stock)}
-          />
-        )}
-
-        {activeStock && activeRunId && (
-          <StockDetailsPage 
-            runId={activeRunId}
-            stock={activeStock}
-            onBack={activeGroup ? handleBackToGroup : handleBackToDiscovery}
-          />
-        )}
+        <Routes>
+          <Route path="/" element={<DashboardPage />} />
+          <Route path="/discovery/new" element={<DiscoveryPage />} />
+          <Route path="/discovery/:runId" element={<DiscoveryPage />} />
+          <Route path="/discovery/:runId/:tab" element={<DiscoveryPage />} />
+          <Route path="/discovery/:runId/group/:type/:name" element={<GroupDetailsPage />} />
+          <Route path="/discovery/:runId/stock/:symbol" element={<StockDetailsPage />} />
+        </Routes>
       </div>
     </div>
   );

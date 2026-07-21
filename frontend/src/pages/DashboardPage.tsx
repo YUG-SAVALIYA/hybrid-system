@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { getRecentDiscoveryRuns, DiscoveryRunSummary } from "../api/discovery";
+import { useNavigate } from "react-router-dom";
 
-export function DashboardPage({ onRunSelect, onNewRun }: { onRunSelect: (runId: string) => void, onNewRun: () => void }) {
+export function DashboardPage() {
   const [runs, setRuns] = useState<DiscoveryRunSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
     let active = true;
@@ -29,7 +31,7 @@ export function DashboardPage({ onRunSelect, onNewRun }: { onRunSelect: (runId: 
           <p className="eyebrow">Overview</p>
           <h1>Recent Discovery Runs</h1>
         </div>
-        <button className="primary" onClick={onNewRun} style={{ padding: '10px 24px', fontSize: '1rem' }}>
+        <button className="primary" onClick={() => navigate('/discovery/new')} style={{ padding: '10px 24px', fontSize: '1rem' }}>
           Run Pipeline
         </button>
       </header>
@@ -56,7 +58,7 @@ export function DashboardPage({ onRunSelect, onNewRun }: { onRunSelect: (runId: 
               </div>
 
               <div className="run-card-actions">
-                <button onClick={() => onRunSelect(run.run_id)} className="primary">More Details</button>
+                <button onClick={() => navigate(`/discovery/${run.run_id}`)} className="primary">More Details</button>
               </div>
             </div>
           );
