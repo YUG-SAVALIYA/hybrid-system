@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.dialects.postgresql import insert
 
 from models.discovery import GroupScore
+from services.technical.technical_consistency import aggregate_group_consistency_periods
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +126,7 @@ class TechnicalSectorAggregationService:
                 calc_details["median_consistency"] = _median(scores)
                 gte_60 = sum(1 for s in scores if s >= 60.0)
                 calc_details["percent_consistency_gte_60"] = (gte_60 / cons_eligible_count) * 100.0
+                calc_details["consistency_periods"] = aggregate_group_consistency_periods(cons_eligible)
             else:
                 warnings.append("INSUFFICIENT_SECTOR_CONSISTENCY_COVERAGE")
 
