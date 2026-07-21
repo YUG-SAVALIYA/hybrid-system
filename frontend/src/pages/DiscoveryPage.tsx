@@ -640,7 +640,6 @@ function StocksTable({
             <th>Final Score</th>
             <th>Technical Score</th>
             <th>Fundamental Score</th>
-            <th>Macro Score</th>
             <th>Coverage</th>
             <th>Status</th>
           </tr>
@@ -658,7 +657,6 @@ function StocksTable({
               <td>{scoreText(stock.final_score)}</td>
               <td>{scoreText(stock.technical_score)}</td>
               <td>{scoreText(stock.fundamental_score)}</td>
-              <td>{scoreText(stock.inherited_macro_score)}</td>
               <td>{finiteScore(stock.score_coverage_pct) ? `${stock.score_coverage_pct?.toFixed(1)}%` : "-"}</td>
               <td><span className={`badge ${stock.score_status?.toLowerCase()}`}>{stock.score_status || "-"}</span></td>
             </tr>

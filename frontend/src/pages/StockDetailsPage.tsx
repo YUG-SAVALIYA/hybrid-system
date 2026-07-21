@@ -183,53 +183,6 @@ export function StockDetailsPage() {
           </div>
         </div>
 
-        {/* Macro Card */}
-        <div className="panel run-card">
-          <div className="run-card-header">
-            <h3>Macro Analysis</h3>
-            <span className={`badge ${c.inherited_macro_score != null && c.inherited_macro_score >= 70 ? "completed" : c.inherited_macro_score != null && c.inherited_macro_score < 40 ? "error" : "warning"}`}>
-              Score: {c.inherited_macro_score != null ? c.inherited_macro_score.toFixed(1) : "-"}
-            </span>
-          </div>
-          <ScoreBar score={c.inherited_macro_score} />
-          <div className="run-card-content">
-            <div className="run-card-section">
-              <h4>Economic Indicators</h4>
-              <ul className="run-card-list">
-                {c.macro_impact && c.macro_impact.category_impacts ? (
-                  Object.entries(c.macro_impact.category_impacts).map(([key, details]: [string, any]) => (
-                    <li key={key}>
-                      <span className="run-card-rank">{key.substring(0, 2).toUpperCase()}</span>
-                      <span>
-                        {key.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}:{' '}
-                        <span className={details.impact === 'POSITIVE' ? 'score-high' : details.impact === 'NEGATIVE' ? 'score-low' : ''}>
-                          {details.impact} ({details.confidence?.toLowerCase()})
-                        </span>
-                      </span>
-                    </li>
-                  ))
-                ) : (
-                  <li><span className="run-card-rank">IN</span> <span>Inherited From: <span>{c.sector} / {c.industry}</span></span></li>
-                )}
-              </ul>
-            </div>
-            
-            {c.macro_impact && (c.macro_impact.reason || c.macro_impact.overall_impact) && (
-              <div className="run-card-section" style={{ marginTop: '16px' }}>
-                <h4>Overall Outlook</h4>
-                <div style={{ padding: '12px', background: 'var(--bg-color)', borderRadius: '8px', border: '1px solid var(--panel-border)', fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
-                  <div style={{ marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span className={`badge ${c.macro_impact.overall_impact?.impact === 'POSITIVE' ? 'completed' : c.macro_impact.overall_impact?.impact === 'NEGATIVE' ? 'error' : 'warning'}`}>
-                      {c.macro_impact.overall_impact?.impact || "N/A"}
-                    </span>
-                    <strong>{c.sector}</strong>
-                  </div>
-                  {c.macro_impact.reason || c.macro_impact.overall_impact?.reason}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
 
       </div>
     </div>
