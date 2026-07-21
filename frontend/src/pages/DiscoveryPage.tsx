@@ -261,7 +261,7 @@ function buildProcessLog(
 export function DiscoveryPage() {
   const { runId: routeRunId, tab: routeTab } = useParams();
   const navigate = useNavigate();
-  const runId = routeRunId || "";
+  const runId = routeRunId === "new" ? "" : (routeRunId || "");
   
   const [runState, setRunState] = useState<RunState>(runManager.getState());
   const { flowState, activeRunId, error, result, preparationStages } = runState;
@@ -282,7 +282,7 @@ export function DiscoveryPage() {
 
   const [activeHorizon, setActiveHorizon] = useState<DiscoveryHorizon>("SHORT");
   const [runHorizon, setRunHorizon] = useState<DiscoveryHorizon>("SHORT");
-  const activeViewTab = routeTab ? routeTab.toUpperCase() : (routeRunId ? "SECTORS" : undefined);
+  const activeViewTab = routeTab ? routeTab.toUpperCase() : (runId ? "SECTORS" : undefined);
   
   const abortRef = useRef<AbortController | null>(null);
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -407,7 +407,7 @@ const resumePreparation = async () => {
 
   return (
     <main className="discovery-shell">
-      {!routeRunId && (
+      {!runId && (
         <header className="dashboard-hero" style={{ gridTemplateColumns: 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div className="hero-copy">
             <p className="eyebrow">Financial analytics</p>
@@ -419,7 +419,7 @@ const resumePreparation = async () => {
         </header>
       )}
 
-      {!routeRunId && (
+      {!runId && (
         <section className="dashboard-grid">
           {!runId && (
             <form className="panel run-panel" onSubmit={startDiscovery}>
@@ -534,7 +534,7 @@ const resumePreparation = async () => {
         </section>
       )}
 
-      {routeRunId && (
+      {runId && (
         <section className="panel results-panel">
           <div className="panel-title">
             <h2>Horizon Results</h2>
