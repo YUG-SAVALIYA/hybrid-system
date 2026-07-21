@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from "recharts";
 function ScoreBar({ score }: { score: number | null }) {
   if (score === null || isNaN(score)) return <div style={{ background: 'var(--panel-border)', height: '6px', borderRadius: '3px', width: '100%', marginBottom: '16px' }} />;
   const width = `${Math.min(Math.max(score, 0), 100)}%`;
@@ -20,6 +21,35 @@ function MiniBarChart({ score }: { score: number | undefined | null }) {
   return (
     <div style={{ display: 'inline-block', width: '60px', height: '6px', background: 'var(--panel-border)', borderRadius: '3px', overflow: 'hidden', marginLeft: '8px', verticalAlign: 'middle' }}>
       <div style={{ width, background: color, height: '100%' }} />
+    </div>
+  );
+}
+
+function ConsistencyChart({ periods }: { periods: any[] }) {
+  if (!periods || periods.length === 0) return null;
+  const data = periods.map((p, i) => ({
+    name: `Period ${i+1}`,
+    company: p.company_return,
+    benchmark: p.benchmark_return
+  }));
+  
+  return (
+    <div style={{ height: 300, width: '100%', marginTop: '32px' }}>
+      <h4 style={{ marginBottom: '16px' }}>Consistency Breakdown</h4>
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+          <XAxis dataKey="name" stroke="var(--text-secondary)" tick={{fontSize: 12}} />
+          <YAxis stroke="var(--text-secondary)" tick={{fontSize: 12}} tickFormatter={(val) => `${val}%`} />
+          <Tooltip 
+             contentStyle={{ background: 'var(--panel-bg)', borderColor: 'var(--panel-border)', borderRadius: '8px' }}
+             formatter={(value: any) => `${Number(value).toFixed(2)}%`}
+          />
+          <Legend />
+          <ReferenceLine y={0} stroke="var(--panel-border)" />
+          <Bar dataKey="company" name="Company Return" fill="var(--primary)" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="benchmark" name="Benchmark Return" fill="var(--text-secondary)" radius={[4, 4, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
     </div>
   );
 }
@@ -98,10 +128,15 @@ export function StockDetailsPage() {
                   </span>
                 </li>
                 <li>
-                  <span className="run-card-rank">CS</span> 
-                  <span>Consistency: <span>{tech?.technical_score?.components?.consistency?.score?.toFixed(1) || '-'} pts</span></span>
+                  <span className="run-card-rank">CO</span> 
+                  <span style={{ display: 'flex', alignItems: 'center' }}>
+                    Consistency Score: <span style={{ marginLeft: '4px' }}>{tech?.consistency?.company_consistency_score?.toFixed(1) || '-'} pts</span>
+                    <MiniBarChart score={tech?.consistency?.company_consistency_score} />
+                  </span>
                 </li>
               </ul>
+              
+              <ConsistencyChart periods={tech?.consistency?.periods} />
             </div>
           </div>
         </div>

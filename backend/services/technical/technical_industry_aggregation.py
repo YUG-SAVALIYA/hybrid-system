@@ -1,4 +1,4 @@
-"""
++"""
 TechnicalIndustryAggregationService
 
 Aggregates company-level technical metrics into industry-level group scores.

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { runManager } from "../services/runManager";
 import { DiscoveryGroupResult, DiscoveryHorizon } from "../api/discovery";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from "recharts";
 
 function ScoreBar({ score }: { score: number | null | undefined }) {
   if (score == null) return null;
@@ -13,6 +14,35 @@ function ScoreBar({ score }: { score: number | null | undefined }) {
         background: score >= 70 ? "var(--completed)" : score < 40 ? "var(--error)" : "var(--warning)",
         transition: "width 0.5s ease-out, background 0.3s"
       }} />
+    </div>
+  );
+}
+
+function ConsistencyChart({ periods }: { periods: any[] }) {
+  if (!periods || periods.length === 0) return null;
+  const data = periods.map((p, i) => ({
+    name: `Period ${i+1}`,
+    company: p.median_company_return,
+    benchmark: p.median_benchmark_return
+  }));
+  
+  return (
+    <div style={{ height: 300, width: '100%', marginTop: '32px' }}>
+      <h4 style={{ marginBottom: '16px' }}>Consistency Breakdown (Medians)</h4>
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+          <XAxis dataKey="name" stroke="var(--text-secondary)" tick={{fontSize: 12}} />
+          <YAxis stroke="var(--text-secondary)" tick={{fontSize: 12}} tickFormatter={(val) => `${val}%`} />
+          <Tooltip 
+             contentStyle={{ background: 'var(--panel-bg)', borderColor: 'var(--panel-border)', borderRadius: '8px' }}
+             formatter={(value: any) => `${Number(value).toFixed(2)}%`}
+          />
+          <Legend />
+          <ReferenceLine y={0} stroke="var(--panel-border)" />
+          <Bar dataKey="company" name="Median Constituent Return" fill="var(--primary)" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="benchmark" name="Median Benchmark Return" fill="var(--text-secondary)" radius={[4, 4, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
     </div>
   );
 }
@@ -134,6 +164,13 @@ export function GroupDetailsPage() {
                 </ul>
               </div>
             </div>
+            
+            <ConsistencyChart 
+              periods={
+                 tech?.consistency_periods || 
+                 tech?.technical?.consistency?.consistency_periods 
+              } 
+            />
           </div>
 
           {/* Fundamental Card */}
