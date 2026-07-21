@@ -1,4 +1,4 @@
-"""
++"""
 TechnicalIndustryAggregationService
 
 Aggregates company-level technical metrics into industry-level group scores.
@@ -11,6 +11,7 @@ from sqlalchemy.dialects.postgresql import insert
 
 import config
 from models.discovery import GroupScore
+from services.technical.technical_consistency import aggregate_group_consistency_periods
 
 logger = logging.getLogger(__name__)
 
@@ -181,6 +182,7 @@ class TechnicalIndustryAggregationService:
                 calc_details["technical"]["consistency"]["median_consistency_score"] = _median(scores)
                 gte_60 = sum(1 for s in scores if s >= 60.0)
                 calc_details["technical"]["consistency"]["consistent_company_percentage"] = (gte_60 / cons_eligible_count) * 100.0
+                calc_details["technical"]["consistency"]["consistency_periods"] = aggregate_group_consistency_periods(cons_eligible)
 
             values_to_upsert.append({
                 "id": str(uuid.uuid4()),

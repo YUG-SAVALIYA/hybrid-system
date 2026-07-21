@@ -1,4 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState, Fragment } from "react";
+import { runManager, RunState, FlowState } from "../services/runManager";
 import {
   createDiscoveryRun,
   DiscoveryApiError,
@@ -13,6 +14,7 @@ import {
   getDiscoveryResult,
   prepareDiscoveryRun,
 } from "../api/discovery";
+import { useParams, useNavigate } from "react-router-dom";
 
 interface Constituent {
   symbol: string;
@@ -31,16 +33,7 @@ interface Constituent {
   market_cap: number | null;
 }
 
-type FlowState =
-  | "IDLE"
-  | "CREATING_RUN"
-  | "PREPARING_DATA"
-  | "EXECUTING_DISCOVERY"
-  | "RUNNING"
-  | "LOADING_RESULT"
-  | "COMPLETED"
-  | "COMPLETED_WITH_WARNINGS"
-  | "FAILED";
+
 
 type WarningItem = {
   code: string;
@@ -265,23 +258,23 @@ function buildProcessLog(
   return items;
 }
 
-export function DiscoveryPage({
-  runId,
-  activeTab,
-  onGroupSelect,
-  onStockSelect,
-  onRunCreated
-}: {
-  runId?: string;
-  activeTab?: string;
-  onGroupSelect?: (group: { type: string, name: string, parentSector: string, parentIndustry: string, horizon: string }) => void;
-  onStockSelect?: (stock: { symbol: string, horizon: string }) => void;
-  onRunCreated?: (runId: string) => void;
-}) {
-  const [flowState, setFlowState] = useState<FlowState>("IDLE");
+export function DiscoveryPage() {
+  const { runId: routeRunId, tab: routeTab } = useParams();
+  const navigate = useNavigate();
+  const runId = routeRunId || "";
+  
+  const [runState, setRunState] = useState<RunState>(runManager.getState());
+  const { flowState, activeRunId, error, result, preparationStages } = runState;
+  
+  useEffect(() => {
+    const unsubscribe = runManager.subscribe((state) => {
+      setRunState({ ...state });
+    });
+    return () => { unsubscribe(); };
+  }, []);
+
   const [customRunId, setCustomRunId] = useState("");
   const [existingRunId, setExistingRunId] = useState(runId || "");
-  const [activeRunId, setActiveRunId] = useState<string | null>(runId || null);
   const [resumeExisting, setResumeExisting] = useState(true);
   const [forceRestartPreparation, setForceRestartPreparation] = useState<boolean>(false);
   const [forceRestartExecution, setForceRestartExecution] = useState<boolean>(false);
@@ -289,12 +282,8 @@ export function DiscoveryPage({
 
   const [activeHorizon, setActiveHorizon] = useState<DiscoveryHorizon>("SHORT");
   const [runHorizon, setRunHorizon] = useState<DiscoveryHorizon>("SHORT");
-  const activeViewTab = activeTab;
-  const [result, setResult] = useState<DiscoveryResult | null>(null);
-  const [preparationStages, setPreparationStages] = useState<Record<string, DiscoveryStageResult>>({});
-  const [error, setError] = useState<DiscoveryApiError | null>(null);
-  const [isPolling, setIsPolling] = useState(false);
-  const inFlightRef = useRef(false);
+  const activeViewTab = routeTab ? routeTab.toUpperCase() : (routeRunId ? "SECTORS" : undefined);
+  
   const abortRef = useRef<AbortController | null>(null);
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollingRequestRef = useRef(false);
@@ -328,179 +317,75 @@ export function DiscoveryPage({
     selectedHorizonView.warnings.forEach((w) => console.warn(`[HORIZON WARNING] ${w}`));
   }, [selectedHorizonView.warnings]);
 
+  useEffect(() => {
+    if (runId && runId !== activeRunId && flowState !== "LOADING_RESULT") {
+      runManager.loadResult(runId).catch(console.error);
+    }
+  }, [runId, activeRunId, flowState]);
+
   const clearPolling = useCallback(() => {
     if (pollRef.current) {
       clearTimeout(pollRef.current);
       pollRef.current = null;
     }
-    setIsPolling(false);
+    
   }, []);
 
-  const loadResult = useCallback(
-    async (runId: string, signal?: AbortSignal) => {
-      setFlowState("LOADING_RESULT");
-      const loaded = await getDiscoveryResult(runId, signal);
-      setResult(loaded);
-      setActiveRunId(loaded.run_id);
-      setError(loaded.error || null);
-      setFlowState(statusFromResult(loaded.status));
-      return loaded;
-    },
-    []
-  );
 
   useEffect(() => {
-    if (runId && runId === activeRunId && flowState === "IDLE") {
-      loadResult(runId).catch(console.error);
-    } else if (runId && runId !== activeRunId) {
-      setActiveRunId(runId);
-      setExistingRunId(runId);
-      loadResult(runId).catch(console.error);
+    if (runId && runId !== runManager.getState().activeRunId) {
+      runManager.loadResult(runId).catch(console.error);
+    } else if (runId && runManager.getState().flowState === "IDLE") {
+      runManager.loadResult(runId).catch(console.error);
     }
-  }, [runId, activeRunId, flowState, loadResult]);
-
-  const handleApiError = useCallback(
-    async (apiError: DiscoveryApiError, runId?: string | null, shouldLoadResult = false) => {
-      setError(apiError);
-      setFlowState("FAILED");
-      if (shouldLoadResult && runId) {
-        try {
-          await loadResult(runId);
-        } catch {
-          setFlowState("FAILED");
-        }
-      }
-    },
-    [loadResult]
-  );
+  }, [runId]);
 
   const startDiscovery = async (event?: FormEvent) => {
     event?.preventDefault();
-    if (inFlightRef.current || !runIdValid) return;
-    inFlightRef.current = true;
-    clearPolling();
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-    setError(null);
-    setResult(null);
-    setPreparationStages({});
-    try {
-      setFlowState("CREATING_RUN");
-      const created = await createDiscoveryRun(
-        { run_id: customRunId.trim() || null, as_of_date: null },
-        controller.signal
-      );
-      setActiveRunId(created.run_id);
-      onRunCreated?.(created.run_id);
-      setFlowState("PREPARING_DATA");
-      const preparation = await prepareDiscoveryRun(
-        created.run_id,
-        { resume: resumeExisting, force_restart: forceRestartPreparation },
-        controller.signal
-      );
-      setPreparationStages(preparation.stage_results);
-      if (preparation.error || preparation.status === "FAILED") {
-        await handleApiError(
-          preparation.error || { code: "DISCOVERY_PREPARATION_FAILED", message: "Preparation failed." },
-          created.run_id
-        );
-        return;
-      }
-      setFlowState("EXECUTING_DISCOVERY");
-      const execution = await executeDiscoveryRun(
-        created.run_id,
-        { resume: resumeExisting, force_restart: forceRestartExecution, target_horizon: runHorizon },
-        controller.signal
-      );
-      if (execution.error) {
-        await handleApiError(execution.error, created.run_id, true);
-        return;
-      }
-      await loadResult(created.run_id, controller.signal);
-    } catch (caught) {
-      if (caught instanceof DOMException && caught.name === "AbortError") return;
-      if (caught instanceof DiscoveryApiException) {
-        await handleApiError(caught.apiError, activeRunId);
-      } else {
-        await handleApiError({ code: "DISCOVERY_REQUEST_FAILED", message: "Discovery request failed." });
-      }
-    } finally {
-      inFlightRef.current = false;
-    }
+    if (!runIdValid) return;
+    await runManager.startRun(
+      customRunId,
+      runHorizon,
+      resumeExisting,
+      forceRestartPreparation,
+      forceRestartExecution,
+      (runId) => navigate(`/discovery/${runId}`)
+    );
   };
 
   const loadExisting = async () => {
-    if (inFlightRef.current || !existingRunIdValid || !existingRunId.trim()) return;
-    inFlightRef.current = true;
-    clearPolling();
-    setError(null);
+    if (!existingRunIdValid || !existingRunId.trim()) return;
     try {
-      const loaded = await loadResult(existingRunId.trim());
-      onRunCreated?.(loaded.run_id);
-    } catch (caught) {
-      if (caught instanceof DiscoveryApiException) {
-        await handleApiError(caught.apiError);
+      const res = await runManager.loadResult(existingRunId.trim());
+      if (res?.run_id) {
+        navigate(`/discovery/${res.run_id}`);
       }
-    } finally {
-      inFlightRef.current = false;
-    }
+    } catch (err: any) {};
   };
 
-  const resumePreparation = async () => {
-    if (!activeRunId || inFlightRef.current) return;
-    inFlightRef.current = true;
-    setFlowState("PREPARING_DATA");
-    setError(null);
-    try {
-      const preparation = await prepareDiscoveryRun(activeRunId, {
-        resume: resumeExisting,
-        force_restart: forceRestartPreparation,
-      });
-      setPreparationStages(preparation.stage_results);
-      setFlowState(statusFromResult(preparation.status));
-      setError(preparation.error || null);
-    } catch (caught) {
-      if (caught instanceof DiscoveryApiException) await handleApiError(caught.apiError, activeRunId);
-    } finally {
-      inFlightRef.current = false;
-    }
+const resumePreparation = async () => {
+    await runManager.resumePreparation(forceRestartPreparation);
   };
 
   const resumeExecution = async () => {
-    if (!activeRunId || inFlightRef.current) return;
-    inFlightRef.current = true;
-    setFlowState("EXECUTING_DISCOVERY");
-    setError(null);
-    try {
-      const execution = await executeDiscoveryRun(activeRunId, {
-        resume: resumeExisting,
-        force_restart: forceRestartExecution,
-        target_horizon: runHorizon,
-      });
-      setError(execution.error || null);
-      await loadResult(activeRunId);
-    } catch (caught) {
-      if (caught instanceof DiscoveryApiException) await handleApiError(caught.apiError, activeRunId, true);
-    } finally {
-      inFlightRef.current = false;
-    }
+    await runManager.resumeExecution(runHorizon, forceRestartExecution);
   };
+
 
   useEffect(() => {
     clearPolling();
     if (!activeRunId || result?.status !== "RUNNING") return;
-    setIsPolling(true);
+    
     const poll = async () => {
       if (pollingRequestRef.current) return;
       pollingRequestRef.current = true;
       try {
         const loaded = await getDiscoveryResult(activeRunId);
-        setResult(loaded);
+        
         if (loaded.status === "RUNNING") {
           pollRef.current = setTimeout(poll, 5000);
         } else {
-          setFlowState(statusFromResult(loaded.status));
+          
           clearPolling();
         }
       } catch {
@@ -534,7 +419,7 @@ export function DiscoveryPage({
         </header>
       )}
 
-      {!activeTab && (
+      {!routeRunId && (
         <section className="dashboard-grid">
           {!runId && (
             <form className="panel run-panel" onSubmit={startDiscovery}>
@@ -624,7 +509,7 @@ export function DiscoveryPage({
           <section className="panel progress-panel" aria-label="Pipeline progress">
             <div className="panel-title">
               <h2>Pipeline Progress</h2>
-              {isPolling && <span className="spinner-label">Refreshing result...</span>}
+
             </div>
             <ol className="timeline-compact">
               {STAGES.map((stage) => {
@@ -649,7 +534,7 @@ export function DiscoveryPage({
         </section>
       )}
 
-      {activeTab && (
+      {routeRunId && (
         <section className="panel results-panel">
           <div className="panel-title">
             <h2>Horizon Results</h2>
@@ -658,10 +543,10 @@ export function DiscoveryPage({
             <div className="empty-state">{emptyMessage}</div>
           ) : (
             <div className="result-content">
-              {activeViewTab === "SECTORS" && <GroupTable title="Sectors" groups={selectedHorizonView.sectors} onRowClick={(name, ps, pi) => onGroupSelect?.({ type: 'SECTOR', name, parentSector: ps, parentIndustry: pi, horizon: activeHorizon })} />}
-              {activeViewTab === "INDUSTRIES" && <GroupTable title="Industries" groups={selectedHorizonView.industries} showParentSector={true} onRowClick={(name, ps, pi) => onGroupSelect?.({ type: 'INDUSTRY', name, parentSector: ps, parentIndustry: pi, horizon: activeHorizon })} />}
-              {activeViewTab === "BASIC_INDUSTRIES" && <GroupTable title="Basic Industries" groups={selectedHorizonView.basicIndustries} showParentSector={true} showParentIndustry={true} onRowClick={(name, ps, pi) => onGroupSelect?.({ type: 'BASIC_INDUSTRY', name, parentSector: ps, parentIndustry: pi, horizon: activeHorizon })} />}
-              {activeViewTab === "STOCKS" && activeRunId && <StocksTable runId={activeRunId} horizon={activeHorizon} stocks={selectedHorizonView.stocks} onStockSelect={onStockSelect} />}
+              {activeViewTab === "SECTORS" && <GroupTable title="Sectors" groups={selectedHorizonView.sectors} onRowClick={(name, ps, pi) => navigate(`/discovery/${activeRunId}/group/SECTOR/${encodeURIComponent(name)}?parentSector=${encodeURIComponent(ps)}&parentIndustry=${encodeURIComponent(pi)}&horizon=${activeHorizon}`)} />}
+              {activeViewTab === "INDUSTRIES" && <GroupTable title="Industries" groups={selectedHorizonView.industries} showParentSector={true} onRowClick={(name, ps, pi) => navigate(`/discovery/${activeRunId}/group/INDUSTRY/${encodeURIComponent(name)}?parentSector=${encodeURIComponent(ps)}&parentIndustry=${encodeURIComponent(pi)}&horizon=${activeHorizon}`)} />}
+              {activeViewTab === "BASIC_INDUSTRIES" && <GroupTable title="Basic Industries" groups={selectedHorizonView.basicIndustries} showParentSector={true} showParentIndustry={true} onRowClick={(name, ps, pi) => navigate(`/discovery/${activeRunId}/group/BASIC_INDUSTRY/${encodeURIComponent(name)}?parentSector=${encodeURIComponent(ps)}&parentIndustry=${encodeURIComponent(pi)}&horizon=${activeHorizon}`)} />}
+              {activeViewTab === "STOCKS" && activeRunId && <StocksTable runId={activeRunId} horizon={activeHorizon} stocks={selectedHorizonView.stocks} onStockSelect={(stock) => navigate(`/discovery/${activeRunId}/stock/${encodeURIComponent(stock.symbol)}?horizon=${stock.horizon}`)} />}
             </div>
           )}
         </section>

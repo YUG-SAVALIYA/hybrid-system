@@ -57,6 +57,9 @@ export interface DiscoveryGroupResult {
   warnings?: string[];
   parent_sector?: string | null;
   parent_industry?: string | null;
+  tech_details?: any;
+  fund_details?: any;
+  macro_details?: any;
 }
 
 export interface DiscoveryStockResult {

@@ -286,3 +286,70 @@ class TechnicalConsistencyService:
 
         self._disc.execute(update(CompanyTechnicalMetric), values_to_update)
         self._disc.commit()
+
+def aggregate_group_consistency_periods(cons_eligible_comps: list) -> list:
+    """
+    Aggregates the historical periods across all eligible companies in a group.
+    Returns a list of period dictionaries with median metrics.
+    """
+    periods_by_date = {}
+
+    for c in cons_eligible_comps:
+        calc_details = c.calculation_details or {}
+        consistency = calc_details.get("consistency", {})
+        periods = consistency.get("periods", [])
+
+        for p in periods:
+            if not p.get("available"):
+                continue
+            
+            s_date = p["start_date"]
+            e_date = p["end_date"]
+            key = (s_date, e_date)
+            
+            if key not in periods_by_date:
+                periods_by_date[key] = {
+                    "start_date": s_date,
+                    "end_date": e_date,
+                    "company_returns": [],
+                    "benchmark_returns": [],
+                    "positives": 0,
+                    "outperforms": 0,
+                    "count": 0
+                }
+            
+            grp = periods_by_date[key]
+            grp["company_returns"].append(p.get("company_return", 0))
+            grp["benchmark_returns"].append(p.get("benchmark_return", 0))
+            if p.get("positive"): grp["positives"] += 1
+            if p.get("outperformed"): grp["outperforms"] += 1
+            grp["count"] += 1
+
+    aggregated = []
+    for key in sorted(periods_by_date.keys()):
+        grp = periods_by_date[key]
+        count = grp["count"]
+        if count == 0:
+            continue
+            
+        c_rets = grp["company_returns"]
+        b_rets = grp["benchmark_returns"]
+        
+        c_rets_sorted = sorted(c_rets)
+        mid = count // 2
+        median_c = (c_rets_sorted[mid] + c_rets_sorted[~mid]) / 2.0
+        
+        b_rets_sorted = sorted(b_rets)
+        median_b = (b_rets_sorted[mid] + b_rets_sorted[~mid]) / 2.0
+
+        aggregated.append({
+            "start_date": grp["start_date"],
+            "end_date": grp["end_date"],
+            "median_company_return": median_c,
+            "median_benchmark_return": median_b,
+            "positive_percentage": (grp["positives"] / count) * 100.0,
+            "outperformed_percentage": (grp["outperforms"] / count) * 100.0,
+            "constituent_count": count
+        })
+        
+    return aggregated

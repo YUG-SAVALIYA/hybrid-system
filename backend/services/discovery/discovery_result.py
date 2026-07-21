@@ -400,6 +400,7 @@ class DiscoveryResultService:
             return None
 
         details = _final_discovery_details(entity_type, group.calculation_details)
+        calc = group.calculation_details or {}
         payload = {
             "name": group.entity_name,
             "rank": group.rank,
@@ -411,6 +412,23 @@ class DiscoveryResultService:
             "status": details.get("status"),
             "coverage_pct": details.get("coverage_pct"),
             "warnings": list(group.warnings or []),
+            "tech_details": {
+                "median_relative_return": calc.get("median_relative_return"),
+                "outperformance_breadth": calc.get("outperformance_breadth"),
+                "percent_consistency_gte_60": calc.get("percent_consistency_gte_60"),
+                "positive_return_breadth": calc.get("positive_return_breadth"),
+                "scores": {
+                    "return_score": getattr(group, "technical_return_score", None),
+                    "breadth": getattr(group, "technical_breadth_score", None),
+                    "volume": getattr(group, "technical_volume_score", None),
+                    "consistency": getattr(group, "technical_consistency_score", None)
+                }
+            },
+            "fund_details": {
+                "pillar_scores": calc.get("fundamental", {}).get("pillar_scores", {}),
+                "metrics": calc.get("fundamental", {}).get("raw_aggregation", {}).get("metrics", {})
+            },
+            "macro_details": calc.get("macro", {}).get("sector_score", {}) if entity_type == ENTITY_SECTOR else (calc.get("macro", {}).get("industry_score", {}) if entity_type == ENTITY_INDUSTRY else calc.get("macro", {}).get("basic_industry_score", {})),
         }
         if entity_type in {ENTITY_INDUSTRY, ENTITY_BASIC_INDUSTRY}:
             payload["parent_sector"] = group.parent_sector or ""

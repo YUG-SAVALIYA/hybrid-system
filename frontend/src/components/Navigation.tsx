@@ -1,14 +1,14 @@
 export type TabName = "DASHBOARD" | "PIPELINE" | "SECTORS" | "INDUSTRIES" | "BASIC_INDUSTRIES" | "STOCKS";
 
-export function Navigation({
-  activeTab,
-  onTabChange,
-  runSelected
-}: {
-  activeTab: TabName;
-  onTabChange: (tab: TabName) => void;
-  runSelected: boolean;
-}) {
+import { Link, useLocation, useParams, matchPath } from "react-router-dom";
+
+export function Navigation() {
+  const location = useLocation();
+  
+  // Try to match if we have a runId in the URL
+  const runMatch = matchPath("/discovery/:runId/*", location.pathname);
+  const runId = runMatch?.params?.runId && runMatch.params.runId !== "new" ? runMatch.params.runId : null;
+  const runSelected = !!runId;
   const tabs: { key: TabName; label: string }[] = [
     { key: "DASHBOARD", label: "Dashboard" },
     { key: "PIPELINE", label: "Run Pipeline" },
