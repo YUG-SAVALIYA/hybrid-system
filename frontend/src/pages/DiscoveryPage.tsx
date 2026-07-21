@@ -407,13 +407,13 @@ const resumePreparation = async () => {
 
   return (
     <main className="discovery-shell">
-      {!routeRunId && (
-        <header className="page-header">
-          <div>
+      {!activeTab && (
+        <header className="dashboard-hero" style={{ gridTemplateColumns: 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="hero-copy">
             <p className="eyebrow">Financial analytics</p>
-            <h1>Sector Discovery</h1>
+            <h1 style={{ marginBottom: 0 }}>Sector Discovery</h1>
           </div>
-          <span className={`state-pill state-${flowState.toLowerCase()}`} aria-live="polite">
+          <span className={`badge ${flowState === 'COMPLETED' ? 'completed' : flowState.includes('FAIL') ? 'error' : flowState === 'IDLE' ? 'pending' : 'running'}`} aria-live="polite">
             {flowState.replace(/_/g, " ")}
           </span>
         </header>

@@ -111,13 +111,11 @@ export function GroupDetailsPage() {
 
   return (
     <div className="discovery-shell">
-      <header className="page-header" style={{ display: 'flex', gap: '24px', alignItems: 'center' }}>
-        <button onClick={() => navigate(-1)} className="secondary" style={{ padding: '8px 16px', height: '40px', background: 'var(--panel-bg)', borderColor: 'var(--panel-border)' }}>&larr; Back</button>
-        <div>
-          <p className="eyebrow">
-            {type === 'SECTOR' ? 'Sector' : type === 'INDUSTRY' ? `${parentSector} > Industry` : `${parentSector} > ${parentIndustry} > Basic Industry`}
-          </p>
-          <h1>{name}</h1>
+      <header className="dashboard-hero" style={{ gridTemplateColumns: 'none', display: 'flex', gap: '20px', alignItems: 'center' }}>
+        <button onClick={onBack} className="secondary" style={{ padding: '8px 18px', height: '40px', flexShrink: 0 }}>&larr; Back</button>
+        <div className="hero-copy">
+          <p className="eyebrow">{group.type.replace('_', ' ')} CONSTITUENTS</p>
+          <h1 style={{ marginBottom: 0 }}>{group.name}</h1>
         </div>
       </header>
       
@@ -294,11 +292,11 @@ export function GroupDetailsPage() {
                     <td style={{ fontWeight: 600, color: 'var(--accent-primary)' }}>{c.symbol}</td>
                     <td>{c.sector}</td>
                     <td>{c.industry}</td>
-                    <td className={c.technical_score >= 70 ? "score-high" : c.technical_score < 40 ? "score-low" : "score-mid"}>
-                      {c.technical_score !== null ? c.technical_score.toFixed(1) : "-"}
+                    <td className={c.technical_score != null && c.technical_score >= 70 ? "score-high" : c.technical_score != null && c.technical_score < 40 ? "score-low" : "score-mid"}>
+                      {c.technical_score != null ? c.technical_score.toFixed(1) : "-"}
                     </td>
-                    <td className={c.fundamental_score >= 70 ? "score-high" : c.fundamental_score < 40 ? "score-low" : "score-mid"}>
-                      {c.fundamental_score !== null ? c.fundamental_score.toFixed(1) : "-"}
+                    <td className={c.fundamental_score != null && c.fundamental_score >= 70 ? "score-high" : c.fundamental_score != null && c.fundamental_score < 40 ? "score-low" : "score-mid"}>
+                      {c.fundamental_score != null ? c.fundamental_score.toFixed(1) : "-"}
                     </td>
                   </tr>
                 ))}

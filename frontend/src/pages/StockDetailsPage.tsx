@@ -98,7 +98,7 @@ export function StockDetailsPage() {
         <button onClick={() => navigate(-1)} className="secondary" style={{ padding: '8px 16px', height: '40px', background: 'var(--panel-bg)', borderColor: 'var(--panel-border)' }}>&larr; Back</button>
         <div>
           <p className="eyebrow">{c.sector} &rsaquo; {c.industry}</p>
-          <h1>{c.symbol}</h1>
+          <h1 style={{ marginBottom: 0 }}>{c.symbol}</h1>
         </div>
       </header>
 
@@ -107,8 +107,8 @@ export function StockDetailsPage() {
         <div className="panel run-card">
           <div className="run-card-header">
             <h3>Technical Details</h3>
-            <span className={`badge ${c.technical_score >= 70 ? "completed" : c.technical_score < 40 ? "error" : "warning"}`}>
-              Score: {c.technical_score !== null ? c.technical_score.toFixed(1) : "-"}
+            <span className={`badge ${c.technical_score != null && c.technical_score >= 70 ? "completed" : c.technical_score != null && c.technical_score < 40 ? "error" : "warning"}`}>
+              Score: {c.technical_score != null ? c.technical_score.toFixed(1) : "-"}
             </span>
           </div>
           <ScoreBar score={c.technical_score} />
@@ -145,8 +145,8 @@ export function StockDetailsPage() {
         <div className="panel run-card">
           <div className="run-card-header">
             <h3>Fundamental Details</h3>
-            <span className={`badge ${c.fundamental_score >= 70 ? "completed" : c.fundamental_score < 40 ? "error" : "warning"}`}>
-              Score: {c.fundamental_score !== null ? c.fundamental_score.toFixed(1) : "-"}
+            <span className={`badge ${c.fundamental_score != null && c.fundamental_score >= 70 ? "completed" : c.fundamental_score != null && c.fundamental_score < 40 ? "error" : "warning"}`}>
+              Score: {c.fundamental_score != null ? c.fundamental_score.toFixed(1) : "-"}
             </span>
           </div>
           <ScoreBar score={c.fundamental_score} />
@@ -187,8 +187,8 @@ export function StockDetailsPage() {
         <div className="panel run-card">
           <div className="run-card-header">
             <h3>Macro Analysis</h3>
-            <span className={`badge ${c.inherited_macro_score >= 70 ? "completed" : c.inherited_macro_score < 40 ? "error" : "warning"}`}>
-              Score: {c.inherited_macro_score !== null ? c.inherited_macro_score.toFixed(1) : "-"}
+            <span className={`badge ${c.inherited_macro_score != null && c.inherited_macro_score >= 70 ? "completed" : c.inherited_macro_score != null && c.inherited_macro_score < 40 ? "error" : "warning"}`}>
+              Score: {c.inherited_macro_score != null ? c.inherited_macro_score.toFixed(1) : "-"}
             </span>
           </div>
           <ScoreBar score={c.inherited_macro_score} />
