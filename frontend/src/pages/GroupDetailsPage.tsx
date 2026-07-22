@@ -218,34 +218,57 @@ export function GroupDetailsPage() {
             </div>
             <ScoreBar score={groupDetails.fundamental_score} />
 
-            <div className="metric-grid">
-              {fund?.metrics?.sales_growth_pct?.median != null && (
-                <MetricTile label="Sales Growth (Median)" value={`${fund.metrics.sales_growth_pct.median.toFixed(1)}%`} subtext="Year-over-year revenue" />
-              )}
-              {fund?.metrics?.net_profit_growth_pct?.median != null && (
-                <MetricTile label="Net Profit Growth" value={`${fund.metrics.net_profit_growth_pct.median.toFixed(1)}%`} subtext="Bottom-line earnings" />
-              )}
-              {fund?.metrics?.positive_pat_period_ratio?.median != null && (
-                <MetricTile label="Profitable History Ratio" value={`${fund.metrics.positive_pat_period_ratio.median.toFixed(1)}%`} subtext="% periods with net profit" />
-              )}
-              {fund?.metrics?.latest_operating_margin_pct?.median != null && (
-                <MetricTile label="Operating Margin" value={`${fund.metrics.latest_operating_margin_pct.median.toFixed(1)}%`} subtext="Operating efficiency" />
-              )}
-              {fund?.metrics?.operating_margin_change_pp?.median != null && (
-                <MetricTile label="Margin Expansion" value={`${fund.metrics.operating_margin_change_pp.median.toFixed(1)} pp`} subtext="Margin trend" />
-              )}
-              {fund?.metrics?.pat_growth_volatility_pct?.median != null && (
-                <MetricTile label="PAT Volatility Index" value={`${fund.metrics.pat_growth_volatility_pct.median.toFixed(1)}%`} subtext="Earnings stability" />
-              )}
-              {fund?.metrics?.debt_to_equity?.median != null && (
-                <MetricTile label="Debt-to-Equity (Median)" value={fund.metrics.debt_to_equity.median.toFixed(2)} subtext="Financial leverage" />
-              )}
-              {fund?.metrics?.borrowing_change_pct?.median != null && (
-                <MetricTile label="Borrowing Change" value={`${fund.metrics.borrowing_change_pct.median.toFixed(1)}%`} subtext="Debt trend" />
-              )}
-              {fund?.metrics?.latest_ocf_to_pat?.median != null && (
-                <MetricTile label="OCF to PAT Ratio" value={fund.metrics.latest_ocf_to_pat.median.toFixed(2)} subtext="Cash flow quality" />
-              )}
+            <div className="run-card-content" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px' }}>
+              <div className="run-card-section">
+                <h4>1. Revenue & Growth</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
+                  {fund?.metrics?.sales_growth_pct?.median != null && (
+                    <MetricTile label="Sales Growth (Median)" value={`${fund.metrics.sales_growth_pct.median.toFixed(1)}%`} subtext="YoY revenue growth" />
+                  )}
+                  {fund?.metrics?.net_profit_growth_pct?.median != null && (
+                    <MetricTile label="Net Profit Growth" value={`${fund.metrics.net_profit_growth_pct.median.toFixed(1)}%`} subtext="Bottom-line earnings" />
+                  )}
+                  {fund?.metrics?.positive_pat_period_ratio?.median != null && (
+                    <MetricTile label="Profitable History" value={`${fund.metrics.positive_pat_period_ratio.median.toFixed(1)}%`} subtext="% periods profitable" />
+                  )}
+                </div>
+              </div>
+
+              <div className="run-card-section">
+                <h4>2. Profitability & Margins</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
+                  {fund?.metrics?.latest_operating_margin_pct?.median != null && (
+                    <MetricTile label="Operating Margin" value={`${fund.metrics.latest_operating_margin_pct.median.toFixed(1)}%`} subtext="Operating efficiency" />
+                  )}
+                  {fund?.metrics?.operating_margin_change_pp?.median != null && (
+                    <MetricTile label="Margin Expansion" value={`${fund.metrics.operating_margin_change_pp.median.toFixed(1)} pp`} subtext="Margin trend" />
+                  )}
+                  {fund?.metrics?.pat_growth_volatility_pct?.median != null && (
+                    <MetricTile label="PAT Volatility Index" value={`${fund.metrics.pat_growth_volatility_pct.median.toFixed(1)}%`} subtext="Earnings stability" />
+                  )}
+                </div>
+              </div>
+
+              <div className="run-card-section">
+                <h4>3. Leverage & Debt Safety</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
+                  {fund?.metrics?.debt_to_equity?.median != null && (
+                    <MetricTile label="Debt-to-Equity (Median)" value={fund.metrics.debt_to_equity.median.toFixed(2)} subtext="Financial leverage" />
+                  )}
+                  {fund?.metrics?.borrowing_change_pct?.median != null && (
+                    <MetricTile label="Borrowing Change" value={`${fund.metrics.borrowing_change_pct.median.toFixed(1)}%`} subtext="Debt trend" />
+                  )}
+                </div>
+              </div>
+
+              <div className="run-card-section">
+                <h4>4. Cash Flow & Quality</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
+                  {fund?.metrics?.latest_ocf_to_pat?.median != null && (
+                    <MetricTile label="OCF to PAT Ratio" value={fund.metrics.latest_ocf_to_pat.median.toFixed(2)} subtext="Cash flow conversion" />
+                  )}
+                </div>
+              </div>
             </div>
 
             {/* Pillar Scores Bar */}

@@ -169,47 +169,72 @@ export function StockDetailsPage() {
           </div>
           <ScoreBar score={c.fundamental_score} />
 
-          <div className="metric-grid">
-            <MetricTile 
-              label="Sales Growth" 
-              value={fund?.peer_benchmarks?.metrics?.sales_growth_pct?.company_value != null ? `${fund.peer_benchmarks.metrics.sales_growth_pct.company_value.toFixed(2)}%` : 'N/A (Not Reported)'}
-              subtext="YoY Revenue Growth"
-            />
-            <MetricTile 
-              label="Net Profit Growth" 
-              value={fund?.peer_benchmarks?.metrics?.net_profit_growth_pct?.company_value != null ? `${fund.peer_benchmarks.metrics.net_profit_growth_pct.company_value.toFixed(2)}%` : 'N/A (Not Reported)'}
-              subtext="Bottom-line Growth"
-            />
-            <MetricTile 
-              label="Operating Margin" 
-              value={fund?.peer_benchmarks?.metrics?.latest_operating_margin_pct?.company_value != null ? `${fund.peer_benchmarks.metrics.latest_operating_margin_pct.company_value.toFixed(2)}%` : 'N/A (Not Reported)'}
-              subtext="Operating Efficiency"
-            />
-            <MetricTile 
-              label="Margin Expansion" 
-              value={fund?.peer_benchmarks?.metrics?.operating_margin_change_pp?.company_value != null ? `${fund.peer_benchmarks.metrics.operating_margin_change_pp.company_value.toFixed(2)} pp` : 'N/A (Not Reported)'}
-              subtext="Margin Trend"
-            />
-            <MetricTile 
-              label="Debt-to-Equity" 
-              value={fund?.peer_benchmarks?.metrics?.debt_to_equity?.company_value != null ? fund.peer_benchmarks.metrics.debt_to_equity.company_value.toFixed(2) : 'N/A (Not Reported)'}
-              subtext="Leverage Risk"
-            />
-            <MetricTile 
-              label="Borrowing Change" 
-              value={fund?.peer_benchmarks?.metrics?.borrowing_change_pct?.company_value != null ? `${fund.peer_benchmarks.metrics.borrowing_change_pct.company_value.toFixed(2)}%` : 'N/A (Not Reported)'}
-              subtext="Debt Change"
-            />
-            <MetricTile 
-              label="OCF to PAT Ratio" 
-              value={fund?.peer_benchmarks?.metrics?.latest_ocf_to_pat?.company_value != null ? fund.peer_benchmarks.metrics.latest_ocf_to_pat.company_value.toFixed(2) : 'N/A (Not Reported)'}
-              subtext="Cash Flow Conversion"
-            />
-            <MetricTile 
-              label="Profitable History" 
-              value={fund?.peer_benchmarks?.metrics?.profit_history?.company_value != null ? `${fund.peer_benchmarks.metrics.profit_history.company_value.toFixed(2)}%` : 'N/A (Not Reported)'}
-              subtext="Profit Frequency"
-            />
+          <div className="run-card-content" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px' }}>
+            <div className="run-card-section">
+              <h4>1. Revenue & Growth</h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
+                <MetricTile 
+                  label="Sales Growth" 
+                  value={fund?.peer_benchmarks?.metrics?.sales_growth_pct?.company_value != null ? `${fund.peer_benchmarks.metrics.sales_growth_pct.company_value.toFixed(2)}%` : 'N/A'}
+                  subtext="YoY Revenue Growth"
+                />
+                <MetricTile 
+                  label="Net Profit Growth" 
+                  value={fund?.peer_benchmarks?.metrics?.net_profit_growth_pct?.company_value != null ? `${fund.peer_benchmarks.metrics.net_profit_growth_pct.company_value.toFixed(2)}%` : 'N/A'}
+                  subtext="Bottom-line Growth"
+                />
+              </div>
+            </div>
+
+            <div className="run-card-section">
+              <h4>2. Profitability & Margins</h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
+                <MetricTile 
+                  label="Operating Margin" 
+                  value={fund?.peer_benchmarks?.metrics?.latest_operating_margin_pct?.company_value != null ? `${fund.peer_benchmarks.metrics.latest_operating_margin_pct.company_value.toFixed(2)}%` : 'N/A'}
+                  subtext="Operating Efficiency"
+                />
+                <MetricTile 
+                  label="Margin Expansion" 
+                  value={fund?.peer_benchmarks?.metrics?.operating_margin_change_pp?.company_value != null ? `${fund.peer_benchmarks.metrics.operating_margin_change_pp.company_value.toFixed(2)} pp` : 'N/A'}
+                  subtext="Margin Trend"
+                />
+              </div>
+            </div>
+
+            <div className="run-card-section">
+              <h4>3. Leverage & Debt Safety</h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
+                <MetricTile 
+                  label="Debt-to-Equity" 
+                  value={fund?.peer_benchmarks?.metrics?.debt_to_equity?.company_value != null ? fund.peer_benchmarks.metrics.debt_to_equity.company_value.toFixed(2) : 'N/A'}
+                  subtext="Leverage Risk"
+                />
+                <MetricTile 
+                  label="Borrowing Change" 
+                  value={fund?.peer_benchmarks?.metrics?.borrowing_change_pct?.company_value != null ? `${fund.peer_benchmarks.metrics.borrowing_change_pct.company_value.toFixed(2)}%` : 'N/A'}
+                  subtext="Debt Trend"
+                />
+              </div>
+            </div>
+
+            <div className="run-card-section">
+              <h4>4. Cash Flow & Quality</h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
+                <MetricTile 
+                  label="OCF to PAT Ratio" 
+                  value={fund?.peer_benchmarks?.metrics?.latest_ocf_to_pat?.company_value != null ? fund.peer_benchmarks.metrics.latest_ocf_to_pat.company_value.toFixed(2) : 'N/A'}
+                  subtext="Cash Flow Conversion"
+                />
+                {fund?.peer_benchmarks?.metrics?.profit_history?.company_value != null && (
+                  <MetricTile 
+                    label="Profitable History" 
+                    value={`${fund.peer_benchmarks.metrics.profit_history.company_value.toFixed(2)}%`}
+                    subtext="Profit Frequency"
+                  />
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>
