@@ -143,17 +143,17 @@ export function StockDetailsPage() {
             />
             <MetricTile 
               label="Volume & Accumulation" 
-              value={tech?.technical_score?.components?.volume?.score ? `${tech.technical_score.components.volume.score.toFixed(1)} / 100` : 'N/A'}
+              value={tech?.technical_score?.components?.volume?.score != null ? `${tech.technical_score.components.volume.score.toFixed(1)} / 100` : (tech?.volume_score != null ? `${tech.volume_score.toFixed(1)} / 100` : 'N/A')}
               subtext="Institutional buying"
             />
             <MetricTile 
               label="Trend Consistency Score" 
-              value={tech?.consistency?.company_consistency_score ? `${tech.consistency.company_consistency_score.toFixed(1)} / 100` : 'N/A'}
+              value={tech?.technical_score?.components?.consistency?.score != null ? `${tech.technical_score.components.consistency.score.toFixed(1)} / 100` : (tech?.consistency?.company_consistency_score != null ? `${tech.consistency.company_consistency_score.toFixed(1)} / 100` : 'N/A')}
               subtext="5-period historical consistency"
             />
           </div>
 
-          <ConsistencyChart periods={tech?.consistency?.periods} />
+          <ConsistencyChart periods={tech?.consistency?.periods || tech?.consistency_periods} />
         </div>
 
         {/* Fundamental Card */}
