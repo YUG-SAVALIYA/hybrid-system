@@ -19,15 +19,6 @@ type WarningItem = {
   message: string;
 };
 
-type ProcessLogItem = {
-  id: string;
-  label: string;
-  status: string;
-  source: string;
-  timestamp?: string | null;
-  detail?: string | null;
-};
-
 const HORIZONS: Array<{ key: DiscoveryHorizon; label: string; desc: string }> = [
   { key: "SHORT", label: "Short Term", desc: "1 - 3 Months" },
   { key: "MID", label: "Mid Term", desc: "3 - 12 Months" },
@@ -58,38 +49,8 @@ function displayError(error: DiscoveryApiError): string {
   return error.message || "The discovery request could not be completed.";
 }
 
-function warningMessage(code: string) {
-  if (code === "BENCHMARK_DATA_UNAVAILABLE") {
-    return "NIFTY 500 benchmark data is unavailable. Import genuine NIFTY 500 benchmark candles before running discovery.";
-  }
-  return code.replace(/_/g, " ").toLowerCase();
-}
-
 function finiteScore(value?: number | null) {
   return typeof value === "number" && Number.isFinite(value);
-}
-
-function stageStatus(stage?: DiscoveryStageResult): DiscoveryStageStatus {
-  return stage?.status || "PENDING";
-}
-
-function collectStageWarnings(
-  result: DiscoveryResult | null,
-  preparation: Record<string, DiscoveryStageResult>
-): WarningItem[] {
-  const items: WarningItem[] = [];
-  const seen = new Set<string>();
-  const add = (code: string, context: string) => {
-    const key = `${code}:${context}`;
-    if (!code || seen.has(key)) return;
-    seen.add(key);
-    items.push({ code, context, message: warningMessage(code) });
-  };
-  result?.warnings.forEach((code) => add(code, "Run"));
-  Object.entries(preparation).forEach(([stage, value]) => {
-    value.warnings?.forEach((code) => add(code, stage));
-  });
-  return items;
 }
 
 type HorizonView = {
@@ -115,7 +76,7 @@ function buildHorizonView(result: DiscoveryResult | null, key: DiscoveryHorizon)
 
 function groupEmptyMessage(horizon: DiscoveryHorizon, result: DiscoveryResult | null, view: HorizonView, flowState: FlowState) {
   if (["CREATING_RUN", "PREPARING_DATA", "EXECUTING_DISCOVERY", "LOADING_RESULT"].includes(flowState)) {
-    return "Pipeline is currently running. Please wait for automated scoring results...";
+    return "Pipeline is currently running automated market analysis. Watch the stage tracker above for real-time progress...";
   }
   const data = result?.horizons[horizon];
   if (!data || data.status === "PENDING") return "Sector selection analysis has not completed for this horizon.";
@@ -140,21 +101,17 @@ export function DiscoveryPage() {
   const [customRunId, setCustomRunId] = useState("");
   const [existingRunId, setExistingRunId] = useState(runId || "");
   const [resumeExisting, setResumeExisting] = useState(true);
-  const [forceRestartPreparation, setForceRestartPreparation] = useState<boolean>(false);
-  const [forceRestartExecution, setForceRestartExecution] = useState<boolean>(false);
 
   const [activeHorizon, setActiveHorizon] = useState<DiscoveryHorizon>("SHORT");
   const [runHorizon, setRunHorizon] = useState<DiscoveryHorizon>("SHORT");
   const activeViewTab = routeTab ? routeTab.toUpperCase() : (runId ? "SECTORS" : undefined);
   
-  const abortRef = useRef<AbortController | null>(null);
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollingRequestRef = useRef(false);
 
   const isBusy = ["CREATING_RUN", "PREPARING_DATA", "EXECUTING_DISCOVERY", "LOADING_RESULT"].includes(flowState);
   const runIdValid = RUN_ID_PATTERN.test(customRunId);
   const existingRunIdValid = RUN_ID_PATTERN.test(existingRunId);
-  const safeError = error ? displayError(error) : null;
 
   const selectedHorizonView = useMemo(() => buildHorizonView(result, activeHorizon), [activeHorizon, result]);
   const emptyMessage = groupEmptyMessage(activeHorizon, result, selectedHorizonView, flowState);
@@ -179,9 +136,9 @@ export function DiscoveryPage() {
       customRunId,
       runHorizon,
       resumeExisting,
-      forceRestartPreparation,
-      forceRestartExecution,
-      (runId) => navigate(`/discovery/${runId}`)
+      false,
+      false,
+      (newRunId) => navigate(`/discovery/${newRunId}`)
     );
   };
 
@@ -195,27 +152,21 @@ export function DiscoveryPage() {
     } catch (err: any) {};
   };
 
-  const resumePreparation = async () => {
-    await runManager.resumePreparation(forceRestartPreparation);
-  };
-
-  const resumeExecution = async () => {
-    await runManager.resumeExecution(runHorizon, forceRestartExecution);
-  };
-
+  // Real-time polling every 3 seconds while pipeline is running
   useEffect(() => {
     clearPolling();
-    if (!activeRunId || result?.status !== "RUNNING") return;
+    const currentRunId = activeRunId || runId;
+    if (!currentRunId) return;
     
     const poll = async () => {
       if (pollingRequestRef.current) return;
       pollingRequestRef.current = true;
       try {
-        const loaded = await getDiscoveryResult(activeRunId);
-        if (loaded.status !== "RUNNING") {
-          clearPolling();
+        const loaded = await getDiscoveryResult(currentRunId);
+        if (loaded.status === "RUNNING") {
+          pollRef.current = setTimeout(poll, 3000);
         } else {
-          pollRef.current = setTimeout(poll, 5000);
+          clearPolling();
         }
       } catch {
         clearPolling();
@@ -223,9 +174,14 @@ export function DiscoveryPage() {
         pollingRequestRef.current = false;
       }
     };
-    pollRef.current = setTimeout(poll, 5000);
+
+    if (isBusy || result?.status === "RUNNING" || flowState === "RUNNING") {
+      pollRef.current = setTimeout(poll, 3000);
+    }
     return clearPolling;
-  }, [activeRunId, clearPolling, result?.status]);
+  }, [activeRunId, runId, clearPolling, result?.status, isBusy, flowState]);
+
+  const showTracker = isBusy || flowState !== "IDLE" || !!runId || !!activeRunId;
 
   return (
     <main className="discovery-shell">
@@ -241,12 +197,21 @@ export function DiscoveryPage() {
         </header>
       )}
 
+      {/* Live Pipeline Progress Tracker Banner */}
+      {showTracker && (
+        <PipelineProgressTracker
+          flowState={flowState}
+          preparationStages={preparationStages}
+          result={result}
+        />
+      )}
+
       {!runId && (
         <section className="dashboard-grid">
           <form className="panel run-panel" onSubmit={startDiscovery}>
             <div className="panel-title">
               <h2>Launch New Discovery Run</h2>
-              {isBusy && <span className="spinner-label" style={{ color: "var(--warning)", fontSize: "0.85rem" }}>⚡ Processing pipeline...</span>}
+              {isBusy && <span className="spinner-label" style={{ color: "var(--warning)", fontSize: "0.85rem" }}>⚡ Pipeline in progress...</span>}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
               <label style={{ display: "flex", flexDirection: "column", gap: "6px", fontSize: "0.9rem", fontWeight: 600 }}>
@@ -373,6 +338,135 @@ export function DiscoveryPage() {
         </section>
       )}
     </main>
+  );
+}
+
+function PipelineProgressTracker({
+  flowState,
+  preparationStages,
+  result,
+}: {
+  flowState: FlowState;
+  preparationStages: Record<string, DiscoveryStageResult>;
+  result: DiscoveryResult | null;
+}) {
+  const stageResultsMap = result?.stage_results || {};
+
+  const computedStages = STAGES.map((stage) => {
+    const sourceMap = stage.source === "preparation" ? preparationStages : stageResultsMap;
+    const stageResult = sourceMap[stage.key];
+    
+    let status: string = stageResult?.status || "PENDING";
+    
+    if (status === "PENDING") {
+      if (flowState === "PREPARING_DATA" && stage.source === "preparation") {
+        const firstUncompletedPrep = STAGES.find(
+          (s) => s.source === "preparation" && (!preparationStages[s.key] || preparationStages[s.key].status !== "COMPLETED")
+        );
+        if (firstUncompletedPrep?.key === stage.key) {
+          status = "RUNNING";
+        }
+      } else if ((flowState === "EXECUTING_DISCOVERY" || flowState === "RUNNING") && stage.source === "execution") {
+        const firstUncompletedExec = STAGES.find(
+          (s) => s.source === "execution" && (!stageResultsMap[s.key] || stageResultsMap[s.key].status !== "COMPLETED")
+        );
+        if (firstUncompletedExec?.key === stage.key) {
+          status = "RUNNING";
+        }
+      }
+    }
+
+    if (flowState === "COMPLETED" || flowState === "COMPLETED_WITH_WARNINGS") {
+      if (status !== "FAILED") status = "COMPLETED";
+    }
+
+    return {
+      ...stage,
+      status,
+      detail: stageResult?.error_message || stageResult?.warnings?.join(", ") || null,
+    };
+  });
+
+  const completedCount = computedStages.filter((s) => s.status === "COMPLETED" || s.status === "COMPLETED_WITH_WARNINGS").length;
+  const isRunning = ["CREATING_RUN", "PREPARING_DATA", "EXECUTING_DISCOVERY", "LOADING_RESULT", "RUNNING"].includes(flowState);
+  
+  let percentage = Math.round((completedCount / STAGES.length) * 100);
+  if (flowState === "COMPLETED" || flowState === "COMPLETED_WITH_WARNINGS") percentage = 100;
+  if (isRunning && percentage === 0) percentage = 10;
+
+  const activeStage = computedStages.find((s) => s.status === "RUNNING") || computedStages.find((s) => s.status === "PENDING");
+
+  return (
+    <div className="pipeline-tracker-panel">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <h3 style={{ fontSize: "1.15rem", margin: 0 }}>
+              {isRunning ? "⚡ Pipeline Execution in Progress" : "✅ Pipeline Execution Status"}
+            </h3>
+            <span className={`badge ${flowState === 'COMPLETED' ? 'completed' : flowState.includes('FAIL') ? 'error' : flowState === 'IDLE' ? 'pending' : 'running'}`}>
+              {flowState.replace(/_/g, " ")}
+            </span>
+          </div>
+          <div style={{ fontSize: "0.88rem", color: "var(--text-secondary)", marginTop: "4px" }}>
+            {isRunning && activeStage ? (
+              <span>Currently Processing: <strong style={{ color: "#38bdf8" }}>Step {completedCount + 1} of 10: {activeStage.label}</strong></span>
+            ) : flowState === "COMPLETED" ? (
+              <span style={{ color: "var(--success)" }}>All 10 pipeline analysis stages completed successfully!</span>
+            ) : (
+              <span>Stage Progress: {completedCount} of 10 stages completed</span>
+            )}
+          </div>
+        </div>
+        <div style={{ fontSize: "1.4rem", fontWeight: 700, color: "#ffffff" }}>
+          {percentage}%
+        </div>
+      </div>
+
+      {/* Progress Bar */}
+      <div className="pipeline-progress-bar-bg">
+        <div 
+          className={`pipeline-progress-bar-fill ${isRunning ? 'running' : ''}`}
+          style={{ width: `${percentage}%` }}
+        />
+      </div>
+
+      {/* 10-Stage Steps Grid */}
+      <div className="stage-step-grid">
+        {computedStages.map((stage, idx) => {
+          const isDone = stage.status === "COMPLETED" || stage.status === "COMPLETED_WITH_WARNINGS";
+          const isExec = stage.status === "RUNNING";
+          const isErr = stage.status === "FAILED";
+
+          let icon = "⚪";
+          let cardClass = "pending";
+          if (isDone) {
+            icon = "🟢";
+            cardClass = "completed";
+          } else if (isExec) {
+            icon = "⚡";
+            cardClass = "running";
+          } else if (isErr) {
+            icon = "🔴";
+            cardClass = "failed";
+          }
+
+          return (
+            <div key={stage.key} className={`stage-step-card ${cardClass}`} title={stage.detail || stage.label}>
+              <span style={{ fontSize: "1rem" }}>{icon}</span>
+              <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                <span style={{ fontSize: "0.72rem", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 600 }}>
+                  Step {idx + 1}
+                </span>
+                <span style={{ fontWeight: isExec ? 700 : 500 }}>
+                  {stage.label}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

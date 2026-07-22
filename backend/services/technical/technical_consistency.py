@@ -295,7 +295,13 @@ def aggregate_group_consistency_periods(cons_eligible_comps: list) -> list:
     periods_by_date = {}
 
     for c in cons_eligible_comps:
-        calc_details = c.calculation_details or {}
+        calc_details = getattr(c, "calculation_details", None) or {}
+        if isinstance(calc_details, str):
+            import json
+            try:
+                calc_details = json.loads(calc_details)
+            except Exception:
+                calc_details = {}
         consistency = calc_details.get("consistency", {})
         periods = consistency.get("periods", [])
 

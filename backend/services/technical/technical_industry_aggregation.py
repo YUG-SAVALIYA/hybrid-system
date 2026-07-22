@@ -40,7 +40,8 @@ class TechnicalIndustryAggregationService:
                     sector, industry,
                     return_available, company_return, relative_return,
                     volume_available, volume_change,
-                    consistency_available, company_consistency_score
+                    consistency_available, company_consistency_score,
+                    calculation_details
                 FROM company_technical_metrics
                 WHERE run_id = :r AND horizon = :h
             """),
