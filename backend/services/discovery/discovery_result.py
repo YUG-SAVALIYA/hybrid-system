@@ -192,17 +192,27 @@ class DiscoveryResultService:
                 "message": _safe_message(run.error_message),
             }
 
+        all_stage_results = {}
+        if run.preparation_stage_results:
+            all_stage_results.update(run.preparation_stage_results)
+        if run.stage_results:
+            all_stage_results.update(run.stage_results)
+
+        status = run.status
+        if status in (None, "PENDING") and run.preparation_status in ("RUNNING", "PREPARING"):
+            status = "RUNNING"
+
         return {
             "run_id": run.id,
-            "status": run.status,
-            "current_stage": run.current_stage,
-            "last_completed_stage": run.last_completed_stage,
-            "started_at": _format_dt(run.started_at),
+            "status": status,
+            "current_stage": run.current_stage or run.preparation_current_stage,
+            "last_completed_stage": run.last_completed_stage or run.preparation_last_completed_stage,
+            "started_at": _format_dt(run.started_at or run.preparation_started_at),
             "completed_at": _format_dt(run.completed_at),
             "resume_count": run.resume_count or 0,
             "warnings": _clean_warnings(warnings),
             "error": error,
-            "stage_results": _sanitize_stage_results(run.stage_results or {}),
+            "stage_results": _sanitize_stage_results(all_stage_results),
             "horizons": horizons,
         }
 

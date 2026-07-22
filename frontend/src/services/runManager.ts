@@ -103,6 +103,7 @@ class RunManager {
       if (onRunCreated) onRunCreated(created.run_id);
       
       this.state.flowState = "PREPARING_DATA";
+      this.startPolling();
       this.notify();
 
       const preparation = await prepareDiscoveryRun(
@@ -253,9 +254,14 @@ class RunManager {
       try {
         const res = await getDiscoveryResult(this.state.activeRunId);
         this.state.result = res;
-        this.state.preparationStages = res.stage_results || {};
+        if (res.stage_results) {
+          this.state.preparationStages = {
+            ...this.state.preparationStages,
+            ...res.stage_results,
+          };
+        }
         
-        if (res.status !== "RUNNING") {
+        if (res.status === "COMPLETED" || res.status === "COMPLETED_WITH_WARNINGS" || res.status === "FAILED") {
           this.clearPolling();
           if (res.status === "COMPLETED_WITH_WARNINGS") this.state.flowState = "COMPLETED_WITH_WARNINGS";
           else if (res.status === "FAILED") this.state.flowState = "FAILED";
@@ -265,7 +271,7 @@ class RunManager {
       } catch (e) {
         // Silently ignore polling errors
       }
-    }, 5000);
+    }, 2000);
   }
 }
 
