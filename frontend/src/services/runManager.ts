@@ -225,13 +225,19 @@ class RunManager {
       this.state.result = res;
       this.state.preparationStages = res.stage_results || {};
       
-      if (res.status === "COMPLETED_WITH_WARNINGS") this.state.flowState = "COMPLETED_WITH_WARNINGS";
-      else if (res.status === "FAILED") this.state.flowState = "FAILED";
-      else if (res.status === "RUNNING") {
+      if (res.status === "COMPLETED_WITH_WARNINGS") {
+        this.clearPolling();
+        this.state.flowState = "COMPLETED_WITH_WARNINGS";
+      } else if (res.status === "FAILED") {
+        this.clearPolling();
+        this.state.flowState = "FAILED";
+      } else if (res.status === "RUNNING") {
         this.state.flowState = "RUNNING";
         this.startPolling();
+      } else {
+        this.clearPolling();
+        this.state.flowState = "COMPLETED";
       }
-      else this.state.flowState = "COMPLETED";
       
       this.notify();
       return res;
@@ -271,7 +277,7 @@ class RunManager {
       } catch (e) {
         // Silently ignore polling errors
       }
-    }, 2000);
+    }, 3000);
   }
 }
 

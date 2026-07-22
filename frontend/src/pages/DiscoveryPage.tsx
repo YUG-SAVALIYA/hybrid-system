@@ -160,34 +160,7 @@ export function DiscoveryPage() {
     }
   }, [result]);
 
-  // Real-time polling every 3 seconds while pipeline is running
-  useEffect(() => {
-    clearPolling();
-    const currentRunId = activeRunId || runId;
-    if (!currentRunId) return;
-    
-    const poll = async () => {
-      if (pollingRequestRef.current) return;
-      pollingRequestRef.current = true;
-      try {
-        const loaded = await getDiscoveryResult(currentRunId);
-        if (loaded.status === "RUNNING") {
-          pollRef.current = setTimeout(poll, 3000);
-        } else {
-          clearPolling();
-        }
-      } catch {
-        clearPolling();
-      } finally {
-        pollingRequestRef.current = false;
-      }
-    };
 
-    if (isBusy || result?.status === "RUNNING" || flowState === "RUNNING") {
-      pollRef.current = setTimeout(poll, 3000);
-    }
-    return clearPolling;
-  }, [activeRunId, runId, clearPolling, result?.status, isBusy, flowState]);
 
   const showTracker = isBusy || flowState !== "IDLE" || !!runId || !!activeRunId;
 
