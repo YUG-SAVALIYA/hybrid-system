@@ -93,7 +93,7 @@ export function DashboardPage() {
       </div>
 
       {/* Runs Grid */}
-      <div className="dashboard-grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))", gap: "16px" }}>
+      <div className="dashboard-grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(400px, 1fr))", gap: "18px" }}>
         {filteredRuns.map((run) => {
           const isCompleted = run.status.startsWith("COMPLETED");
           const isFailed = run.status === "FAILED";
@@ -101,26 +101,28 @@ export function DashboardPage() {
           const hasData = run.top_sectors.length > 0 || run.top_industries.length > 0 || run.top_stocks.length > 0;
 
           return (
-            <div key={run.run_id} className="run-card" style={{ padding: "16px 18px" }}>
+            <div key={run.run_id} className="run-card" style={{ padding: "18px 20px", overflow: "hidden" }}>
               <div>
-                <div className="run-card-header" style={{ marginBottom: "12px" }}>
-                  <div>
-                    <h3 style={{ fontSize: "1rem", margin: 0 }}>Run: {run.run_date || run.run_id}</h3>
-                    <div className="run-card-date" style={{ fontSize: "0.75rem" }}>
+                <div className="run-card-header" style={{ marginBottom: "14px" }}>
+                  <div style={{ overflow: "hidden", paddingRight: "10px" }}>
+                    <h3 style={{ fontSize: "1.05rem", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={run.run_date || run.run_id}>
+                      Run: {run.run_date || run.run_id}
+                    </h3>
+                    <div className="run-card-date" style={{ fontSize: "0.75rem", marginTop: "2px" }}>
                       {run.started_at ? new Date(run.started_at).toLocaleString() : run.run_id}
                     </div>
                   </div>
-                  <span className={`badge ${statusBadge}`}>
+                  <span className={`badge ${statusBadge}`} style={{ flexShrink: 0 }}>
                     {run.status.replace(/_/g, " ")}
                   </span>
                 </div>
 
                 {!hasData ? (
-                  <div style={{ padding: "16px", background: "#18181b", borderRadius: "8px", border: "1px solid #27272a", fontSize: "0.82rem", color: "var(--text-muted)", textAlign: "center" }}>
+                  <div style={{ padding: "20px 16px", background: "#18181b", borderRadius: "8px", border: "1px solid #27272a", fontSize: "0.85rem", color: "var(--text-muted)", textAlign: "center" }}>
                     ⚠️ No output selection data (Run incomplete or failed)
                   </div>
                 ) : (
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", minWidth: 0 }}>
                     <SummaryGroup title="Sectors" items={run.top_sectors} badgeColor="#10b981" />
                     <SummaryGroup title="Industries" items={run.top_industries} badgeColor="#38bdf8" />
                     <SummaryGroup title="Basic Industries" items={run.top_basic_industries} badgeColor="#a855f7" />
@@ -129,20 +131,20 @@ export function DashboardPage() {
                 )}
               </div>
 
-              <div style={{ display: "flex", gap: "10px", marginTop: "12px", paddingTop: "12px", borderTop: "1px solid var(--panel-border)" }}>
+              <div style={{ display: "flex", gap: "10px", marginTop: "14px", paddingTop: "12px", borderTop: "1px solid var(--panel-border)" }}>
                 <button
                   onClick={() => navigate(`/discovery/${run.run_id}/SECTORS`)}
                   className="primary"
-                  style={{ flex: 1, minHeight: "34px", fontSize: "0.82rem" }}
+                  style={{ flex: 1, minHeight: "36px", fontSize: "0.85rem" }}
                 >
-                  📊 Sectors
+                  📊 View Sectors
                 </button>
                 <button
                   onClick={() => navigate(`/discovery/${run.run_id}/STOCKS`)}
                   className="secondary"
-                  style={{ flex: 1, minHeight: "34px", fontSize: "0.82rem" }}
+                  style={{ flex: 1, minHeight: "36px", fontSize: "0.85rem" }}
                 >
-                  📈 Stocks
+                  📈 View Stocks
                 </button>
               </div>
             </div>
@@ -154,26 +156,28 @@ export function DashboardPage() {
 }
 
 function SummaryGroup({ title, items, badgeColor }: { title: string; items: { name: string; rank?: number | null }[]; badgeColor?: string }) {
-  if (items.length === 0) return null;
+  if (!items || items.length === 0) return null;
   
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-      <h4 style={{ fontSize: "0.72rem", margin: 0 }}>{title}</h4>
-      <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-        {items.slice(0, 2).map((item, i) => (
+    <div style={{ display: "flex", flexDirection: "column", gap: "5px", minWidth: 0 }}>
+      <h4 style={{ fontSize: "0.72rem", margin: 0, letterSpacing: "0.06em" }}>{title}</h4>
+      <div style={{ display: "flex", flexDirection: "column", gap: "4px", minWidth: 0 }}>
+        {items.slice(0, 3).map((item, i) => (
           <div
             key={i}
             style={{
               display: "flex",
               alignItems: "center",
               gap: "6px",
-              fontSize: "0.8rem",
+              fontSize: "0.78rem",
               background: "#18181b",
               padding: "4px 8px",
               borderRadius: "6px",
               border: "1px solid #27272a",
               overflow: "hidden",
+              minWidth: 0,
             }}
+            title={item.name}
           >
             <span
               style={{
@@ -188,7 +192,7 @@ function SummaryGroup({ title, items, badgeColor }: { title: string; items: { na
             >
               #{item.rank || i + 1}
             </span>
-            <span style={{ fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "#f4f4f5" }}>
+            <span style={{ fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "#f4f4f5", minWidth: 0 }}>
               {item.name}
             </span>
           </div>
