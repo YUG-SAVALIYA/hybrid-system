@@ -99,7 +99,7 @@ export function DashboardPage() {
           const isFailed = run.status === "FAILED";
           const statusBadge = isFailed ? "error" : isCompleted ? "completed" : "pending";
           const hasData = run.top_sectors.length > 0 || run.top_industries.length > 0 || run.top_stocks.length > 0;
-          const horizonText = run.horizon === "LONG" ? "Long Term (1-3Y)" : run.horizon === "MID" ? "Mid Term (3-12M)" : "Short Term (1-3M)";
+          const horizonText = run.horizon === "LONG" ? "Long Term (1M)" : run.horizon === "MID" ? "Mid Term (1W)" : "Short Term (1D)";
 
           return (
             <div key={run.run_id} className="run-card" style={{ padding: "18px 20px", overflow: "hidden" }}>

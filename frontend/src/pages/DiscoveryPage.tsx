@@ -20,9 +20,9 @@ type WarningItem = {
 };
 
 const HORIZONS: Array<{ key: DiscoveryHorizon; label: string; desc: string }> = [
-  { key: "SHORT", label: "Short Term", desc: "1 - 3 Months" },
-  { key: "MID", label: "Mid Term", desc: "3 - 12 Months" },
-  { key: "LONG", label: "Long Term", desc: "1 - 3 Years" },
+  { key: "SHORT", label: "Short Term", desc: "1 Day / 1D" },
+  { key: "MID", label: "Mid Term", desc: "1 Week / 1W" },
+  { key: "LONG", label: "Long Term", desc: "1 Month / 1M" },
 ];
 
 const STAGES: Array<{ key: string; label: string; source: "preparation" | "execution" }> = [
@@ -282,7 +282,7 @@ export function DiscoveryPage() {
             {/* Fixed Investment Horizon Indicator */}
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <span className="badge pending" style={{ fontSize: "0.85rem", padding: "6px 14px", background: "#18181b", border: "1px solid var(--panel-border)" }}>
-                🎯 Target Horizon: <strong style={{ color: "#ffffff", marginLeft: "4px" }}>{activeHorizon === "LONG" ? "Long Term (1-3 Years)" : activeHorizon === "MID" ? "Mid Term (3-12 Months)" : "Short Term (1-3 Months)"}</strong>
+                🎯 Target Horizon: <strong style={{ color: "#ffffff", marginLeft: "4px" }}>{activeHorizon === "LONG" ? "Long Term (1 Month / 1M)" : activeHorizon === "MID" ? "Mid Term (1 Week / 1W)" : "Short Term (1 Day / 1D)"}</strong>
               </span>
             </div>
           </div>
