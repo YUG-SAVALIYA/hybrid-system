@@ -99,6 +99,7 @@ export function DashboardPage() {
           const isFailed = run.status === "FAILED";
           const statusBadge = isFailed ? "error" : isCompleted ? "completed" : "pending";
           const hasData = run.top_sectors.length > 0 || run.top_industries.length > 0 || run.top_stocks.length > 0;
+          const horizonText = run.horizon === "LONG" ? "Long Term (1-3Y)" : run.horizon === "MID" ? "Mid Term (3-12M)" : "Short Term (1-3M)";
 
           return (
             <div key={run.run_id} className="run-card" style={{ padding: "18px 20px", overflow: "hidden" }}>
@@ -112,9 +113,14 @@ export function DashboardPage() {
                       {run.started_at ? new Date(run.started_at).toLocaleString() : run.run_id}
                     </div>
                   </div>
-                  <span className={`badge ${statusBadge}`} style={{ flexShrink: 0 }}>
-                    {run.status.replace(/_/g, " ")}
-                  </span>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px", flexShrink: 0 }}>
+                    <span className={`badge ${statusBadge}`}>
+                      {run.status.replace(/_/g, " ")}
+                    </span>
+                    <span className="badge pending" style={{ fontSize: "0.68rem", padding: "2px 6px" }}>
+                      🎯 {horizonText}
+                    </span>
+                  </div>
                 </div>
 
                 {!hasData ? (

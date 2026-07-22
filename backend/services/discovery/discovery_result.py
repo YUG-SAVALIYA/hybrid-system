@@ -110,6 +110,7 @@ class DiscoveryResultService:
             summary_by_run[run.id] = {
                 "run_id": run.id,
                 "status": run.status or "UNKNOWN",
+                "horizon": run.horizon or "SHORT",
                 "run_date": run.run_date,
                 "started_at": _format_dt(run.started_at),
                 "completed_at": _format_dt(run.completed_at),

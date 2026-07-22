@@ -223,6 +223,7 @@ export interface DiscoveryRunSummaryItem {
 export interface DiscoveryRunSummary {
   run_id: string;
   status: string;
+  horizon?: string | null;
   run_date?: string | null;
   started_at?: string | null;
   completed_at?: string | null;

@@ -152,6 +152,14 @@ export function DiscoveryPage() {
     } catch (err: any) {};
   };
 
+  useEffect(() => {
+    if (result?.horizons) {
+      const keys: DiscoveryHorizon[] = ["SHORT", "MID", "LONG"];
+      const populated = keys.find((k) => (result.horizons[k]?.sectors && result.horizons[k].sectors.length > 0) || (result.horizons[k]?.stocks && result.horizons[k].stocks.length > 0));
+      if (populated) setActiveHorizon(populated);
+    }
+  }, [result]);
+
   // Real-time polling every 3 seconds while pipeline is running
   useEffect(() => {
     clearPolling();
@@ -271,21 +279,11 @@ export function DiscoveryPage() {
               <h2 style={{ fontSize: "1.5rem" }}>Run ID: {runId}</h2>
             </div>
 
-            {/* Investment Horizon Switcher */}
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "#18181b", padding: "4px", borderRadius: "10px", border: "1px solid var(--panel-border)" }}>
-              <span style={{ fontSize: "0.8rem", color: "var(--text-muted)", padding: "0 8px", fontWeight: 600 }}>Horizon:</span>
-              {HORIZONS.map((h) => (
-                <button
-                  key={h.key}
-                  type="button"
-                  className={activeHorizon === h.key ? "primary" : "secondary"}
-                  onClick={() => setActiveHorizon(h.key)}
-                  style={{ minHeight: "32px", padding: "0 12px", fontSize: "0.82rem" }}
-                  title={`${h.label} (${h.desc})`}
-                >
-                  {h.label}
-                </button>
-              ))}
+            {/* Fixed Investment Horizon Indicator */}
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span className="badge pending" style={{ fontSize: "0.85rem", padding: "6px 14px", background: "#18181b", border: "1px solid var(--panel-border)" }}>
+                🎯 Target Horizon: <strong style={{ color: "#ffffff", marginLeft: "4px" }}>{activeHorizon === "LONG" ? "Long Term (1-3 Years)" : activeHorizon === "MID" ? "Mid Term (3-12 Months)" : "Short Term (1-3 Months)"}</strong>
+              </span>
             </div>
           </div>
 

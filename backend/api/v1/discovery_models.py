@@ -213,6 +213,7 @@ class DiscoveryRunSummaryItem(BaseModel):
 class DiscoveryRunSummary(BaseModel):
     run_id: str
     status: str
+    horizon: Optional[str] = "SHORT"
     run_date: Optional[str] = None
     started_at: Optional[str] = None
     completed_at: Optional[str] = None
