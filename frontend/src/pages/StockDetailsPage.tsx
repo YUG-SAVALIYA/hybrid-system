@@ -116,17 +116,17 @@ export function StockDetailsPage() {
               <ul className="run-card-list">
                 <li>
                   <span>Relative Return vs Benchmark:</span>
-                  <strong style={{ color: relative_return >= 0 ? "#10b981" : "#f43f5e" }}>
-                    {relative_return != null ? (relative_return >= 0 ? `+${relative_return.toFixed(2)}%` : `${relative_return.toFixed(2)}%`) : '-'}
+                  <strong style={{ color: (relative_return || 0) >= 0 ? "#10b981" : "#f43f5e" }}>
+                    {relative_return != null ? (relative_return >= 0 ? `+${relative_return.toFixed(2)}%` : `${relative_return.toFixed(2)}%`) : 'N/A'}
                   </strong>
                 </li>
                 <li>
                   <span>Volume & Accumulation Score:</span>
-                  <strong>{tech?.technical_score?.components?.volume?.score ? `${tech.technical_score.components.volume.score.toFixed(1)} / 100` : '-'}</strong>
+                  <strong>{tech?.technical_score?.components?.volume?.score ? `${tech.technical_score.components.volume.score.toFixed(1)} / 100` : 'N/A'}</strong>
                 </li>
                 <li>
                   <span>Consistency Score:</span>
-                  <strong>{tech?.consistency?.company_consistency_score ? `${tech.consistency.company_consistency_score.toFixed(1)} / 100` : '-'}</strong>
+                  <strong>{tech?.consistency?.company_consistency_score ? `${tech.consistency.company_consistency_score.toFixed(1)} / 100` : 'N/A'}</strong>
                 </li>
               </ul>
               
@@ -152,32 +152,32 @@ export function StockDetailsPage() {
             <div className="run-card-section">
               <h4>1. Revenue & Earnings Growth</h4>
               <ul className="run-card-list">
-                <li>Sales Growth: <strong>{fund?.peer_benchmarks?.metrics?.sales_growth_pct?.company_value != null ? fund.peer_benchmarks.metrics.sales_growth_pct.company_value.toFixed(2) + '%' : '-'}</strong></li>
-                <li>Net Profit Growth: <strong>{fund?.peer_benchmarks?.metrics?.net_profit_growth_pct?.company_value != null ? fund.peer_benchmarks.metrics.net_profit_growth_pct.company_value.toFixed(2) + '%' : '-'}</strong></li>
+                <li>Sales Growth: <strong>{fund?.peer_benchmarks?.metrics?.sales_growth_pct?.company_value != null ? fund.peer_benchmarks.metrics.sales_growth_pct.company_value.toFixed(2) + '%' : 'N/A (Not Reported)'}</strong></li>
+                <li>Net Profit Growth: <strong>{fund?.peer_benchmarks?.metrics?.net_profit_growth_pct?.company_value != null ? fund.peer_benchmarks.metrics.net_profit_growth_pct.company_value.toFixed(2) + '%' : 'N/A (Not Reported)'}</strong></li>
               </ul>
             </div>
 
             <div className="run-card-section">
               <h4>2. Profit Margins</h4>
               <ul className="run-card-list">
-                <li>Operating Margin: <strong>{fund?.peer_benchmarks?.metrics?.latest_operating_margin_pct?.company_value != null ? fund.peer_benchmarks.metrics.latest_operating_margin_pct.company_value.toFixed(2) + '%' : '-'}</strong></li>
-                <li>Margin Expansion: <strong>{fund?.peer_benchmarks?.metrics?.operating_margin_change_pp?.company_value != null ? fund.peer_benchmarks.metrics.operating_margin_change_pp.company_value.toFixed(2) + ' pp' : '-'}</strong></li>
+                <li>Operating Margin: <strong>{fund?.peer_benchmarks?.metrics?.latest_operating_margin_pct?.company_value != null ? fund.peer_benchmarks.metrics.latest_operating_margin_pct.company_value.toFixed(2) + '%' : 'N/A (Not Reported)'}</strong></li>
+                <li>Margin Expansion: <strong>{fund?.peer_benchmarks?.metrics?.operating_margin_change_pp?.company_value != null ? fund.peer_benchmarks.metrics.operating_margin_change_pp.company_value.toFixed(2) + ' pp' : 'N/A (Not Reported)'}</strong></li>
               </ul>
             </div>
 
             <div className="run-card-section">
               <h4>3. Balance Sheet Safety</h4>
               <ul className="run-card-list">
-                <li>Debt-to-Equity: <strong>{fund?.peer_benchmarks?.metrics?.debt_to_equity?.company_value != null ? fund.peer_benchmarks.metrics.debt_to_equity.company_value.toFixed(2) : '-'}</strong></li>
-                <li>Borrowing Change: <strong>{fund?.peer_benchmarks?.metrics?.borrowing_change_pct?.company_value != null ? fund.peer_benchmarks.metrics.borrowing_change_pct.company_value.toFixed(2) + '%' : '-'}</strong></li>
+                <li>Debt-to-Equity: <strong>{fund?.peer_benchmarks?.metrics?.debt_to_equity?.company_value != null ? fund.peer_benchmarks.metrics.debt_to_equity.company_value.toFixed(2) : 'N/A (Not Reported)'}</strong></li>
+                <li>Borrowing Change: <strong>{fund?.peer_benchmarks?.metrics?.borrowing_change_pct?.company_value != null ? fund.peer_benchmarks.metrics.borrowing_change_pct.company_value.toFixed(2) + '%' : 'N/A (Not Reported)'}</strong></li>
               </ul>
             </div>
 
             <div className="run-card-section">
               <h4>4. Cash Flow & Quality</h4>
               <ul className="run-card-list">
-                <li>OCF to PAT Ratio: <strong>{fund?.peer_benchmarks?.metrics?.latest_ocf_to_pat?.company_value != null ? fund.peer_benchmarks.metrics.latest_ocf_to_pat.company_value.toFixed(2) : '-'}</strong></li>
-                <li>Profitable History: <strong>{fund?.peer_benchmarks?.metrics?.profit_history?.company_value != null ? fund.peer_benchmarks.metrics.profit_history.company_value.toFixed(2) + '%' : '-'}</strong></li>
+                <li>OCF to PAT Ratio: <strong>{fund?.peer_benchmarks?.metrics?.latest_ocf_to_pat?.company_value != null ? fund.peer_benchmarks.metrics.latest_ocf_to_pat.company_value.toFixed(2) : 'N/A (Not Reported)'}</strong></li>
+                <li>Profitable History: <strong>{fund?.peer_benchmarks?.metrics?.profit_history?.company_value != null ? fund.peer_benchmarks.metrics.profit_history.company_value.toFixed(2) + '%' : 'N/A (Not Reported)'}</strong></li>
               </ul>
             </div>
           </div>

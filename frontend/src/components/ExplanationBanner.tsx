@@ -53,21 +53,11 @@ export function ScoreExplanationBanner() {
 
         <div className="guide-pill">
           <div className="guide-pill-name">
-            <span>🌍 Macro Score</span>
+            <span>⭐ Final Composite Score</span>
             <span className="score-high">0-100</span>
           </div>
           <div className="guide-pill-text">
-            Assesses macroeconomic tailwinds, interest rate environment & industry alignment.
-          </div>
-        </div>
-
-        <div className="guide-pill">
-          <div className="guide-pill-name">
-            <span>⭐ Final Score</span>
-            <span className="score-high">0-100</span>
-          </div>
-          <div className="guide-pill-text">
-            Weighted composite index combining Technical + Fundamental + Macro factors.
+            Weighted index combining Technical Trends + Fundamental Health.
           </div>
         </div>
       </div>
@@ -77,7 +67,7 @@ export function ScoreExplanationBanner() {
 
 export function ScoreCell({ score }: { score: number | null | undefined }) {
   if (score == null || isNaN(score)) {
-    return <span style={{ color: "var(--text-muted)" }}>-</span>;
+    return <span className="badge pending" style={{ fontSize: "0.72rem", padding: "2px 8px", opacity: 0.7 }} title="Score pending or not applicable">N/A</span>;
   }
 
   const num = Number(score);
