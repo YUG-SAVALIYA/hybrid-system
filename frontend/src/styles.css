@@ -679,3 +679,57 @@ tr.selected-row {
 .pill-completed .pill-dot { background: var(--success); }
 .pill-running .pill-dot { background: #38bdf8; }
 .pill-failed .pill-dot { background: var(--danger); }
+
+/* Modern Metric Tile Grid */
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.metric-tile {
+  background: #18181b;
+  border: 1px solid #27272a;
+  border-radius: 8px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: all 0.2s ease-in-out;
+}
+
+.metric-tile:hover {
+  border-color: #3f3f46;
+  background: #1f1f23;
+}
+
+.metric-tile-label {
+  font-size: 0.73rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.metric-tile-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.metric-tile-sublabel {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+}
+
+.pillar-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #18181b;
+  border: 1px solid #27272a;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}

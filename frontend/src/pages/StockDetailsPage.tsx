@@ -15,6 +15,18 @@ function ScoreBar({ score }: { score: number | null }) {
   );
 }
 
+function MetricTile({ label, value, subtext, color }: { label: string; value: string | number; subtext?: string; color?: string }) {
+  return (
+    <div className="metric-tile">
+      <div className="metric-tile-label">{label}</div>
+      <div className="metric-tile-value" style={color ? { color } : {}}>
+        {value}
+      </div>
+      {subtext && <div className="metric-tile-sublabel">{subtext}</div>}
+    </div>
+  );
+}
+
 function ConsistencyChart({ periods }: { periods: any[] }) {
   if (!periods || periods.length === 0) return null;
   const data = periods.map((p, i) => ({
@@ -81,58 +93,67 @@ export function StockDetailsPage() {
   const tech = c.tech_details;
   const fund = c.fund_details;
   const relative_return = c.relative_return !== undefined ? c.relative_return : (c.company_return != null && c.benchmark_return != null ? c.company_return - c.benchmark_return : null);
+  const horizonLabel = horizon === "LONG" ? "1 Month (1M)" : horizon === "MID" ? "1 Week (1W)" : "1 Day (1D)";
 
   return (
     <div className="discovery-shell">
-      <header className="page-header" style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
-        <button onClick={() => navigate(-1)} className="secondary" style={{ padding: '8px 18px', height: '40px', flexShrink: 0 }}>&larr; Back to Results</button>
+      {/* Header */}
+      <header className="dashboard-hero" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '20px' }}>
         <div>
-          <p className="eyebrow" style={{ color: "var(--text-muted)", fontSize: "0.8rem", textTransform: "uppercase" }}>
+          <button onClick={() => navigate(-1)} className="secondary" style={{ padding: '6px 14px', height: '32px', fontSize: '0.82rem', marginBottom: '10px' }}>
+            &larr; Back to Results
+          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <h1 style={{ margin: 0 }}>{c.symbol}</h1>
+            <span className="badge pending" style={{ fontSize: "0.75rem" }}>🎯 {horizonLabel}</span>
+          </div>
+          <p className="eyebrow" style={{ color: "var(--text-muted)", fontSize: "0.82rem", textTransform: "uppercase", marginTop: "4px" }}>
             {c.sector} &rsaquo; {c.industry}
           </p>
-          <h1 style={{ margin: "2px 0 0 0" }}>{c.symbol} Stock Deep Dive</h1>
+        </div>
+
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 600 }}>Composite Score</div>
+          <ScoreCell score={c.final_score || c.score} />
         </div>
       </header>
 
       <ScoreExplanationBanner />
 
-      <div className="dashboard-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))" }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
         {/* Technical Card */}
         <div className="panel run-card">
           <div className="run-card-header">
             <div>
               <h3>Technical Momentum & Trend</h3>
               <div style={{ fontSize: "0.82rem", color: "var(--text-secondary)", marginTop: "2px" }}>
-                Price relative return, volume profile & 5-period trend consistency.
+                Price relative return, volume accumulation & 5-period trend consistency.
               </div>
             </div>
             <ScoreCell score={c.technical_score} />
           </div>
           <ScoreBar score={c.technical_score} />
 
-          <div className="run-card-content">
-            <div className="run-card-section">
-              <h4>Momentum Indicators</h4>
-              <ul className="run-card-list">
-                <li>
-                  <span>Relative Return vs Benchmark:</span>
-                  <strong style={{ color: (relative_return || 0) >= 0 ? "#10b981" : "#f43f5e" }}>
-                    {relative_return != null ? (relative_return >= 0 ? `+${relative_return.toFixed(2)}%` : `${relative_return.toFixed(2)}%`) : 'N/A'}
-                  </strong>
-                </li>
-                <li>
-                  <span>Volume & Accumulation Score:</span>
-                  <strong>{tech?.technical_score?.components?.volume?.score ? `${tech.technical_score.components.volume.score.toFixed(1)} / 100` : 'N/A'}</strong>
-                </li>
-                <li>
-                  <span>Consistency Score:</span>
-                  <strong>{tech?.consistency?.company_consistency_score ? `${tech.consistency.company_consistency_score.toFixed(1)} / 100` : 'N/A'}</strong>
-                </li>
-              </ul>
-              
-              <ConsistencyChart periods={tech?.consistency?.periods} />
-            </div>
+          <div className="metric-grid">
+            <MetricTile 
+              label="Relative Return vs Benchmark" 
+              value={relative_return != null ? `${relative_return >= 0 ? '+' : ''}${relative_return.toFixed(2)}%` : 'N/A'}
+              subtext="Outperformance vs index"
+              color={(relative_return || 0) >= 0 ? "#10b981" : "#f43f5e"}
+            />
+            <MetricTile 
+              label="Volume & Accumulation" 
+              value={tech?.technical_score?.components?.volume?.score ? `${tech.technical_score.components.volume.score.toFixed(1)} / 100` : 'N/A'}
+              subtext="Institutional buying"
+            />
+            <MetricTile 
+              label="Trend Consistency Score" 
+              value={tech?.consistency?.company_consistency_score ? `${tech.consistency.company_consistency_score.toFixed(1)} / 100` : 'N/A'}
+              subtext="5-period historical consistency"
+            />
           </div>
+
+          <ConsistencyChart periods={tech?.consistency?.periods} />
         </div>
 
         {/* Fundamental Card */}
@@ -148,41 +169,49 @@ export function StockDetailsPage() {
           </div>
           <ScoreBar score={c.fundamental_score} />
 
-          <div className="run-card-content" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
-            <div className="run-card-section">
-              <h4>1. Revenue & Earnings Growth</h4>
-              <ul className="run-card-list">
-                <li>Sales Growth: <strong>{fund?.peer_benchmarks?.metrics?.sales_growth_pct?.company_value != null ? fund.peer_benchmarks.metrics.sales_growth_pct.company_value.toFixed(2) + '%' : 'N/A (Not Reported)'}</strong></li>
-                <li>Net Profit Growth: <strong>{fund?.peer_benchmarks?.metrics?.net_profit_growth_pct?.company_value != null ? fund.peer_benchmarks.metrics.net_profit_growth_pct.company_value.toFixed(2) + '%' : 'N/A (Not Reported)'}</strong></li>
-              </ul>
-            </div>
-
-            <div className="run-card-section">
-              <h4>2. Profit Margins</h4>
-              <ul className="run-card-list">
-                <li>Operating Margin: <strong>{fund?.peer_benchmarks?.metrics?.latest_operating_margin_pct?.company_value != null ? fund.peer_benchmarks.metrics.latest_operating_margin_pct.company_value.toFixed(2) + '%' : 'N/A (Not Reported)'}</strong></li>
-                <li>Margin Expansion: <strong>{fund?.peer_benchmarks?.metrics?.operating_margin_change_pp?.company_value != null ? fund.peer_benchmarks.metrics.operating_margin_change_pp.company_value.toFixed(2) + ' pp' : 'N/A (Not Reported)'}</strong></li>
-              </ul>
-            </div>
-
-            <div className="run-card-section">
-              <h4>3. Balance Sheet Safety</h4>
-              <ul className="run-card-list">
-                <li>Debt-to-Equity: <strong>{fund?.peer_benchmarks?.metrics?.debt_to_equity?.company_value != null ? fund.peer_benchmarks.metrics.debt_to_equity.company_value.toFixed(2) : 'N/A (Not Reported)'}</strong></li>
-                <li>Borrowing Change: <strong>{fund?.peer_benchmarks?.metrics?.borrowing_change_pct?.company_value != null ? fund.peer_benchmarks.metrics.borrowing_change_pct.company_value.toFixed(2) + '%' : 'N/A (Not Reported)'}</strong></li>
-              </ul>
-            </div>
-
-            <div className="run-card-section">
-              <h4>4. Cash Flow & Quality</h4>
-              <ul className="run-card-list">
-                <li>OCF to PAT Ratio: <strong>{fund?.peer_benchmarks?.metrics?.latest_ocf_to_pat?.company_value != null ? fund.peer_benchmarks.metrics.latest_ocf_to_pat.company_value.toFixed(2) : 'N/A (Not Reported)'}</strong></li>
-                <li>Profitable History: <strong>{fund?.peer_benchmarks?.metrics?.profit_history?.company_value != null ? fund.peer_benchmarks.metrics.profit_history.company_value.toFixed(2) + '%' : 'N/A (Not Reported)'}</strong></li>
-              </ul>
-            </div>
+          <div className="metric-grid">
+            <MetricTile 
+              label="Sales Growth" 
+              value={fund?.peer_benchmarks?.metrics?.sales_growth_pct?.company_value != null ? `${fund.peer_benchmarks.metrics.sales_growth_pct.company_value.toFixed(2)}%` : 'N/A (Not Reported)'}
+              subtext="YoY Revenue Growth"
+            />
+            <MetricTile 
+              label="Net Profit Growth" 
+              value={fund?.peer_benchmarks?.metrics?.net_profit_growth_pct?.company_value != null ? `${fund.peer_benchmarks.metrics.net_profit_growth_pct.company_value.toFixed(2)}%` : 'N/A (Not Reported)'}
+              subtext="Bottom-line Growth"
+            />
+            <MetricTile 
+              label="Operating Margin" 
+              value={fund?.peer_benchmarks?.metrics?.latest_operating_margin_pct?.company_value != null ? `${fund.peer_benchmarks.metrics.latest_operating_margin_pct.company_value.toFixed(2)}%` : 'N/A (Not Reported)'}
+              subtext="Operating Efficiency"
+            />
+            <MetricTile 
+              label="Margin Expansion" 
+              value={fund?.peer_benchmarks?.metrics?.operating_margin_change_pp?.company_value != null ? `${fund.peer_benchmarks.metrics.operating_margin_change_pp.company_value.toFixed(2)} pp` : 'N/A (Not Reported)'}
+              subtext="Margin Trend"
+            />
+            <MetricTile 
+              label="Debt-to-Equity" 
+              value={fund?.peer_benchmarks?.metrics?.debt_to_equity?.company_value != null ? fund.peer_benchmarks.metrics.debt_to_equity.company_value.toFixed(2) : 'N/A (Not Reported)'}
+              subtext="Leverage Risk"
+            />
+            <MetricTile 
+              label="Borrowing Change" 
+              value={fund?.peer_benchmarks?.metrics?.borrowing_change_pct?.company_value != null ? `${fund.peer_benchmarks.metrics.borrowing_change_pct.company_value.toFixed(2)}%` : 'N/A (Not Reported)'}
+              subtext="Debt Change"
+            />
+            <MetricTile 
+              label="OCF to PAT Ratio" 
+              value={fund?.peer_benchmarks?.metrics?.latest_ocf_to_pat?.company_value != null ? fund.peer_benchmarks.metrics.latest_ocf_to_pat.company_value.toFixed(2) : 'N/A (Not Reported)'}
+              subtext="Cash Flow Conversion"
+            />
+            <MetricTile 
+              label="Profitable History" 
+              value={fund?.peer_benchmarks?.metrics?.profit_history?.company_value != null ? `${fund.peer_benchmarks.metrics.profit_history.company_value.toFixed(2)}%` : 'N/A (Not Reported)'}
+              subtext="Profit Frequency"
+            />
           </div>
         </div>
-
       </div>
     </div>
   );

@@ -19,6 +19,18 @@ function ScoreBar({ score }: { score: number | null | undefined }) {
   );
 }
 
+function MetricTile({ label, value, subtext, color }: { label: string; value: string | number; subtext?: string; color?: string }) {
+  return (
+    <div className="metric-tile">
+      <div className="metric-tile-label">{label}</div>
+      <div className="metric-tile-value" style={color ? { color } : {}}>
+        {value}
+      </div>
+      {subtext && <div className="metric-tile-sublabel">{subtext}</div>}
+    </div>
+  );
+}
+
 function ConsistencyChart({ periods }: { periods: any[] }) {
   if (!periods || periods.length === 0) return null;
   const data = periods.map((p, i) => ({
@@ -115,21 +127,36 @@ export function GroupDetailsPage() {
     (c.industry && c.industry.toLowerCase().includes(filter.toLowerCase()))
   );
 
+  const horizonLabel = horizon === "LONG" ? "1 Month (1M)" : horizon === "MID" ? "1 Week (1W)" : "1 Day (1D)";
+
   return (
     <div className="discovery-shell">
-      <header className="dashboard-hero" style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
-        <button onClick={() => navigate(-1)} className="secondary" style={{ padding: '8px 18px', height: '40px', flexShrink: 0 }}>&larr; Back to Results</button>
+      {/* Page Navigation Header */}
+      <header className="dashboard-hero" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '20px' }}>
         <div>
-          <p className="eyebrow" style={{ color: "var(--text-muted)", fontSize: "0.8rem", textTransform: "uppercase" }}>
-            {(type || '').replace(/_/g, ' ')} ANALYSIS • {horizon} TERM
+          <button onClick={() => navigate(-1)} className="secondary" style={{ padding: '6px 14px', height: '32px', fontSize: '0.82rem', marginBottom: '10px' }}>
+            &larr; Back to Discovery Results
+          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <h1 style={{ margin: 0 }}>{name}</h1>
+            <span className="badge pending" style={{ fontSize: "0.75rem" }}>🎯 {horizonLabel}</span>
+          </div>
+          <p className="eyebrow" style={{ color: "var(--text-muted)", fontSize: "0.82rem", textTransform: "uppercase", marginTop: "4px" }}>
+            {(type || '').replace(/_/g, ' ')} ANALYSIS {parentSector ? `• ${parentSector}` : ''}
           </p>
-          <h1 style={{ margin: "2px 0 0 0" }}>{name}</h1>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 600 }}>Composite Score</div>
+            <ScoreCell score={groupDetails.final_score} />
+          </div>
         </div>
       </header>
 
       <ScoreExplanationBanner />
 
-      {/* Cards section */}
+      {/* Breakdown Cards Section */}
       {groupDetails && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           
@@ -139,38 +166,35 @@ export function GroupDetailsPage() {
               <div>
                 <h3>Technical Analysis Breakdown</h3>
                 <div style={{ fontSize: "0.82rem", color: "var(--text-secondary)", marginTop: "2px" }}>
-                  Evaluates 5-period price relative return, breadth metrics, and trend consistency.
+                  Price relative returns, breadth indicators & 5-period momentum consistency.
                 </div>
               </div>
               <ScoreCell score={groupDetails.technical_score} />
             </div>
             <ScoreBar score={groupDetails.technical_score} />
 
-            <div className="run-card-content" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
-              <div className="run-card-section">
-                <h4>1. Returns Performance</h4>
-                <ul className="run-card-list">
-                  <li>Median Relative Return: <strong>{tech?.median_relative_return != null ? tech.median_relative_return.toFixed(1) + '%' : '-'}</strong></li>
-                  <li>Pillar Score: <strong style={{ color: (tech?.scores?.return_score || 0) >= 50 ? "#10b981" : "#f43f5e" }}>{tech?.scores?.return_score != null ? tech.scores.return_score.toFixed(1) + ' / 100' : '-'}</strong></li>
-                </ul>
-              </div>
-
-              <div className="run-card-section">
-                <h4>2. Market Breadth</h4>
-                <ul className="run-card-list">
-                  <li>Positive Return Ratio: <strong>{tech?.positive_return_breadth != null ? tech.positive_return_breadth.toFixed(1) + '%' : '-'}</strong></li>
-                  <li>Outperforming Benchmark: <strong>{tech?.outperformance_breadth != null ? tech.outperformance_breadth.toFixed(1) + '%' : '-'}</strong></li>
-                  <li>Pillar Score: <strong style={{ color: (tech?.scores?.breadth || 0) >= 50 ? "#10b981" : "#f43f5e" }}>{tech?.scores?.breadth != null ? tech.scores.breadth.toFixed(1) + ' / 100' : '-'}</strong></li>
-                </ul>
-              </div>
-
-              <div className="run-card-section">
-                <h4>3. Trend Consistency</h4>
-                <ul className="run-card-list">
-                  <li>High Consistency Rate (&ge;60%): <strong>{tech?.percent_consistency_gte_60 != null ? tech.percent_consistency_gte_60.toFixed(1) + '%' : '-'}</strong></li>
-                  <li>Pillar Score: <strong style={{ color: (tech?.scores?.consistency || 0) >= 50 ? "#10b981" : "#f43f5e" }}>{tech?.scores?.consistency != null ? tech.scores.consistency.toFixed(1) + ' / 100' : '-'}</strong></li>
-                </ul>
-              </div>
+            <div className="metric-grid">
+              <MetricTile 
+                label="Relative Return (Median)" 
+                value={tech?.median_relative_return != null ? `${tech.median_relative_return >= 0 ? '+' : ''}${tech.median_relative_return.toFixed(1)}%` : 'N/A'}
+                subtext="Outperformance vs Benchmark"
+                color={tech?.median_relative_return >= 0 ? "#10b981" : "#f43f5e"}
+              />
+              <MetricTile 
+                label="Positive Return Ratio" 
+                value={tech?.positive_return_breadth != null ? `${tech.positive_return_breadth.toFixed(1)}%` : 'N/A'}
+                subtext="% constituents with positive gain"
+              />
+              <MetricTile 
+                label="Outperformance Ratio" 
+                value={tech?.outperformance_breadth != null ? `${tech.outperformance_breadth.toFixed(1)}%` : 'N/A'}
+                subtext="% constituents beating index"
+              />
+              <MetricTile 
+                label="High Consistency Rate" 
+                value={tech?.percent_consistency_gte_60 != null ? `${tech.percent_consistency_gte_60.toFixed(1)}%` : 'N/A'}
+                subtext="% stocks with ≥60% consistency"
+              />
             </div>
             
             <ConsistencyChart 
@@ -187,64 +211,69 @@ export function GroupDetailsPage() {
               <div>
                 <h3>Fundamental Analysis Breakdown</h3>
                 <div style={{ fontSize: "0.82rem", color: "var(--text-secondary)", marginTop: "2px" }}>
-                  Evaluates sales growth, operating margins, debt safety & earnings quality.
+                  Sales growth, operating margins, leverage safety & earnings stability across member stocks.
                 </div>
               </div>
               <ScoreCell score={groupDetails.fundamental_score} />
             </div>
             <ScoreBar score={groupDetails.fundamental_score} />
 
-            <div className="run-card-content" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
-              <div className="run-card-section">
-                <h4>1. Revenue & Profit Performance</h4>
-                <ul className="run-card-list">
-                  {fund?.metrics?.sales_growth_pct?.median != null && (
-                    <li>Sales Growth (Median): <strong>{fund.metrics.sales_growth_pct.median.toFixed(1)}%</strong></li>
-                  )}
-                  {fund?.metrics?.net_profit_growth_pct?.median != null && (
-                    <li>Net Profit Growth (Median): <strong>{fund.metrics.net_profit_growth_pct.median.toFixed(1)}%</strong></li>
-                  )}
-                  {fund?.metrics?.positive_pat_period_ratio?.median != null && (
-                    <li>Profitable History Ratio: <strong>{fund.metrics.positive_pat_period_ratio.median.toFixed(1)}%</strong></li>
-                  )}
-                  <li>Pillar Score: <strong style={{ color: (fund?.pillar_scores?.growth?.score || 0) >= 50 ? "#10b981" : "#f43f5e" }}>{fund?.pillar_scores?.growth?.score != null ? fund.pillar_scores.growth.score.toFixed(1) + ' / 100' : (fund?.pillar_scores?.earnings_quality?.score != null ? fund.pillar_scores.earnings_quality.score.toFixed(1) + ' / 100' : 'N/A')}</strong></li>
-                </ul>
-              </div>
+            <div className="metric-grid">
+              {fund?.metrics?.sales_growth_pct?.median != null && (
+                <MetricTile label="Sales Growth (Median)" value={`${fund.metrics.sales_growth_pct.median.toFixed(1)}%`} subtext="Year-over-year revenue" />
+              )}
+              {fund?.metrics?.net_profit_growth_pct?.median != null && (
+                <MetricTile label="Net Profit Growth" value={`${fund.metrics.net_profit_growth_pct.median.toFixed(1)}%`} subtext="Bottom-line earnings" />
+              )}
+              {fund?.metrics?.positive_pat_period_ratio?.median != null && (
+                <MetricTile label="Profitable History Ratio" value={`${fund.metrics.positive_pat_period_ratio.median.toFixed(1)}%`} subtext="% periods with net profit" />
+              )}
+              {fund?.metrics?.latest_operating_margin_pct?.median != null && (
+                <MetricTile label="Operating Margin" value={`${fund.metrics.latest_operating_margin_pct.median.toFixed(1)}%`} subtext="Operating efficiency" />
+              )}
+              {fund?.metrics?.operating_margin_change_pp?.median != null && (
+                <MetricTile label="Margin Expansion" value={`${fund.metrics.operating_margin_change_pp.median.toFixed(1)} pp`} subtext="Margin trend" />
+              )}
+              {fund?.metrics?.pat_growth_volatility_pct?.median != null && (
+                <MetricTile label="PAT Volatility Index" value={`${fund.metrics.pat_growth_volatility_pct.median.toFixed(1)}%`} subtext="Earnings stability" />
+              )}
+              {fund?.metrics?.debt_to_equity?.median != null && (
+                <MetricTile label="Debt-to-Equity (Median)" value={fund.metrics.debt_to_equity.median.toFixed(2)} subtext="Financial leverage" />
+              )}
+              {fund?.metrics?.borrowing_change_pct?.median != null && (
+                <MetricTile label="Borrowing Change" value={`${fund.metrics.borrowing_change_pct.median.toFixed(1)}%`} subtext="Debt trend" />
+              )}
+              {fund?.metrics?.latest_ocf_to_pat?.median != null && (
+                <MetricTile label="OCF to PAT Ratio" value={fund.metrics.latest_ocf_to_pat.median.toFixed(2)} subtext="Cash flow quality" />
+              )}
+            </div>
 
-              <div className="run-card-section">
-                <h4>2. Profitability & Stability</h4>
-                <ul className="run-card-list">
-                  {fund?.metrics?.latest_operating_margin_pct?.median != null && (
-                    <li>Operating Margin (Median): <strong>{fund.metrics.latest_operating_margin_pct.median.toFixed(1)}%</strong></li>
-                  )}
-                  {fund?.metrics?.operating_margin_change_pp?.median != null && (
-                    <li>Margin Expansion: <strong>{fund.metrics.operating_margin_change_pp.median.toFixed(1)} pp</strong></li>
-                  )}
-                  {fund?.metrics?.pat_growth_volatility_pct?.median != null && (
-                    <li>PAT Volatility Index: <strong>{fund.metrics.pat_growth_volatility_pct.median.toFixed(1)}%</strong></li>
-                  )}
-                  <li>Pillar Score: <strong style={{ color: (fund?.pillar_scores?.profitability?.score || 0) >= 50 ? "#10b981" : "#f43f5e" }}>{fund?.pillar_scores?.profitability?.score != null ? fund.pillar_scores.profitability.score.toFixed(1) + ' / 100' : 'N/A'}</strong></li>
-                </ul>
-              </div>
-
-              <div className="run-card-section">
-                <h4>3. Financial Health & Leverage</h4>
-                <ul className="run-card-list">
-                  {fund?.metrics?.debt_to_equity?.median != null && (
-                    <li>Debt-to-Equity (Median): <strong>{fund.metrics.debt_to_equity.median.toFixed(2)}</strong></li>
-                  )}
-                  {fund?.metrics?.borrowing_change_pct?.median != null && (
-                    <li>Borrowing Change: <strong>{fund.metrics.borrowing_change_pct.median.toFixed(1)}%</strong></li>
-                  )}
-                  {fund?.metrics?.latest_ocf_to_pat?.median != null && (
-                    <li>OCF to PAT Ratio: <strong>{fund.metrics.latest_ocf_to_pat.median.toFixed(2)}</strong></li>
-                  )}
-                  <li>Financial Strength Score: <strong style={{ color: (fund?.pillar_scores?.financial_strength?.score || 0) >= 50 ? "#10b981" : "#f43f5e" }}>{fund?.pillar_scores?.financial_strength?.score != null ? fund.pillar_scores.financial_strength.score.toFixed(1) + ' / 100' : 'N/A'}</strong></li>
-                  {fund?.pillar_scores?.earnings_quality?.score != null && (
-                    <li>Earnings Quality Score: <strong style={{ color: fund.pillar_scores.earnings_quality.score >= 50 ? "#10b981" : "#f43f5e" }}>{fund.pillar_scores.earnings_quality.score.toFixed(1)} / 100</strong></li>
-                  )}
-                </ul>
-              </div>
+            {/* Pillar Scores Bar */}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", marginTop: "16px", paddingTop: "14px", borderTop: "1px solid var(--panel-border)" }}>
+              {fund?.pillar_scores?.growth?.score != null && (
+                <div className="pillar-chip">
+                  <span style={{ color: "var(--text-muted)" }}>Growth Pillar:</span>
+                  <span style={{ color: fund.pillar_scores.growth.score >= 50 ? "#10b981" : "#f43f5e" }}>{fund.pillar_scores.growth.score.toFixed(1)} / 100</span>
+                </div>
+              )}
+              {fund?.pillar_scores?.profitability?.score != null && (
+                <div className="pillar-chip">
+                  <span style={{ color: "var(--text-muted)" }}>Profitability Pillar:</span>
+                  <span style={{ color: fund.pillar_scores.profitability.score >= 50 ? "#10b981" : "#f43f5e" }}>{fund.pillar_scores.profitability.score.toFixed(1)} / 100</span>
+                </div>
+              )}
+              {fund?.pillar_scores?.financial_strength?.score != null && (
+                <div className="pillar-chip">
+                  <span style={{ color: "var(--text-muted)" }}>Financial Strength:</span>
+                  <span style={{ color: fund.pillar_scores.financial_strength.score >= 50 ? "#10b981" : "#f43f5e" }}>{fund.pillar_scores.financial_strength.score.toFixed(1)} / 100</span>
+                </div>
+              )}
+              {fund?.pillar_scores?.earnings_quality?.score != null && (
+                <div className="pillar-chip">
+                  <span style={{ color: "var(--text-muted)" }}>Earnings Quality:</span>
+                  <span style={{ color: fund.pillar_scores.earnings_quality.score >= 50 ? "#10b981" : "#f43f5e" }}>{fund.pillar_scores.earnings_quality.score.toFixed(1)} / 100</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -261,32 +290,32 @@ export function GroupDetailsPage() {
             </div>
             <ScoreBar score={groupDetails.macro_score} />
 
-            <div className="run-card-content" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
-              <div className="run-card-section">
-                <h4>Economic Indicators & Alignment</h4>
-                <ul className="run-card-list">
-                  {macro?.categories ? Object.entries(macro.categories).map(([catKey, catVal]: [string, any]) => (
-                    <li key={catKey}>
-                      <span style={{ fontWeight: 600 }}>{catKey.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')}:</span>
-                      <span className={catVal.impact === 'POSITIVE' ? 'score-high' : catVal.impact === 'NEGATIVE' ? 'score-low' : 'score-mid'}>
-                        {catVal.impact} ({catVal.numeric_value ?? 'N/A'} pts)
-                      </span>
-                    </li>
-                  )) : <li>Sector aligned with macroeconomic trends & market conditions.</li>}
-                </ul>
-              </div>
-              <div className="run-card-section">
-                <h4>Macro Outlook Summary</h4>
-                <div style={{ padding: "12px", background: "#18181b", borderRadius: "8px", border: "1px solid #27272a" }}>
-                  <span className={`badge ${macro?.llm_overall_impact === 'POSITIVE' ? 'completed' : macro?.llm_overall_impact === 'NEGATIVE' ? 'error' : 'pending'}`}>
-                    {macro?.llm_overall_impact || "NEUTRAL"} OUTLOOK
-                  </span>
-                  <p style={{ margin: "8px 0 0 0", fontSize: "0.85rem", color: "var(--text-secondary)" }}>
-                    {macro?.llm_summary || macro?.reasoning || "Macro parameters align favorably with standard sector metrics."}
-                  </p>
+            <div className="metric-grid">
+              {macro?.categories ? Object.entries(macro.categories).map(([catKey, catVal]: [string, any]) => (
+                <MetricTile 
+                  key={catKey}
+                  label={catKey.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')}
+                  value={catVal.impact}
+                  subtext={catVal.numeric_value != null ? `${catVal.numeric_value} pts` : undefined}
+                  color={catVal.impact === 'POSITIVE' ? '#10b981' : catVal.impact === 'NEGATIVE' ? '#f43f5e' : '#f59e0b'}
+                />
+              )) : (
+                <div style={{ padding: "12px", background: "#18181b", borderRadius: "8px", color: "var(--text-secondary)", fontSize: "0.85rem" }}>
+                  Sector aligned with macroeconomic trends & market conditions.
                 </div>
-              </div>
+              )}
             </div>
+
+            {macro && (
+              <div style={{ marginTop: "14px", padding: "14px", background: "#18181b", borderRadius: "8px", border: "1px solid #27272a" }}>
+                <span className={`badge ${macro?.llm_overall_impact === 'POSITIVE' ? 'completed' : macro?.llm_overall_impact === 'NEGATIVE' ? 'error' : 'pending'}`}>
+                  {macro?.llm_overall_impact || "NEUTRAL"} OUTLOOK
+                </span>
+                <p style={{ margin: "8px 0 0 0", fontSize: "0.88rem", color: "#f4f4f5" }}>
+                  {macro?.llm_summary || macro?.reasoning || "Macro parameters align favorably with standard sector metrics."}
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}
