@@ -196,29 +196,95 @@ export function GroupDetailsPage() {
 
             <div className="run-card-content" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
               <div className="run-card-section">
-                <h4>1. Revenue & Profit Growth</h4>
+                <h4>1. Revenue & Profit Performance</h4>
                 <ul className="run-card-list">
-                  <li>Sales Growth (Median): <strong>{fund?.metrics?.sales_growth_pct?.median != null ? fund.metrics.sales_growth_pct.median.toFixed(1) + '%' : 'N/A (Not Reported)'}</strong></li>
-                  <li>Net Profit Growth (Median): <strong>{fund?.metrics?.net_profit_growth_pct?.median != null ? fund.metrics.net_profit_growth_pct.median.toFixed(1) + '%' : 'N/A (Not Reported)'}</strong></li>
-                  <li>Pillar Score: <strong style={{ color: (fund?.pillar_scores?.growth?.score || 0) >= 50 ? "#10b981" : "#f43f5e" }}>{fund?.pillar_scores?.growth?.score != null ? fund.pillar_scores.growth.score.toFixed(1) + ' / 100' : 'N/A'}</strong></li>
+                  {fund?.metrics?.sales_growth_pct?.median != null && (
+                    <li>Sales Growth (Median): <strong>{fund.metrics.sales_growth_pct.median.toFixed(1)}%</strong></li>
+                  )}
+                  {fund?.metrics?.net_profit_growth_pct?.median != null && (
+                    <li>Net Profit Growth (Median): <strong>{fund.metrics.net_profit_growth_pct.median.toFixed(1)}%</strong></li>
+                  )}
+                  {fund?.metrics?.positive_pat_period_ratio?.median != null && (
+                    <li>Profitable History Ratio: <strong>{fund.metrics.positive_pat_period_ratio.median.toFixed(1)}%</strong></li>
+                  )}
+                  <li>Pillar Score: <strong style={{ color: (fund?.pillar_scores?.growth?.score || 0) >= 50 ? "#10b981" : "#f43f5e" }}>{fund?.pillar_scores?.growth?.score != null ? fund.pillar_scores.growth.score.toFixed(1) + ' / 100' : (fund?.pillar_scores?.earnings_quality?.score != null ? fund.pillar_scores.earnings_quality.score.toFixed(1) + ' / 100' : 'N/A')}</strong></li>
                 </ul>
               </div>
 
               <div className="run-card-section">
-                <h4>2. Profitability Margins</h4>
+                <h4>2. Profitability & Stability</h4>
                 <ul className="run-card-list">
-                  <li>Operating Margin (Median): <strong>{fund?.metrics?.latest_operating_margin_pct?.median != null ? fund.metrics.latest_operating_margin_pct.median.toFixed(1) + '%' : 'N/A (Not Reported)'}</strong></li>
-                  <li>Margin Change: <strong>{fund?.metrics?.operating_margin_change_pp?.median != null ? fund.metrics.operating_margin_change_pp.median.toFixed(1) + ' pp' : 'N/A (Not Reported)'}</strong></li>
+                  {fund?.metrics?.latest_operating_margin_pct?.median != null && (
+                    <li>Operating Margin (Median): <strong>{fund.metrics.latest_operating_margin_pct.median.toFixed(1)}%</strong></li>
+                  )}
+                  {fund?.metrics?.operating_margin_change_pp?.median != null && (
+                    <li>Margin Expansion: <strong>{fund.metrics.operating_margin_change_pp.median.toFixed(1)} pp</strong></li>
+                  )}
+                  {fund?.metrics?.pat_growth_volatility_pct?.median != null && (
+                    <li>PAT Volatility Index: <strong>{fund.metrics.pat_growth_volatility_pct.median.toFixed(1)}%</strong></li>
+                  )}
                   <li>Pillar Score: <strong style={{ color: (fund?.pillar_scores?.profitability?.score || 0) >= 50 ? "#10b981" : "#f43f5e" }}>{fund?.pillar_scores?.profitability?.score != null ? fund.pillar_scores.profitability.score.toFixed(1) + ' / 100' : 'N/A'}</strong></li>
                 </ul>
               </div>
 
               <div className="run-card-section">
-                <h4>3. Financial Health & Debt</h4>
+                <h4>3. Financial Health & Leverage</h4>
                 <ul className="run-card-list">
-                  <li>Debt-to-Equity (Median): <strong>{fund?.metrics?.debt_to_equity?.median != null ? fund.metrics.debt_to_equity.median.toFixed(2) : 'N/A (Not Reported)'}</strong></li>
-                  <li>Pillar Score: <strong style={{ color: (fund?.pillar_scores?.financial_strength?.score || 0) >= 50 ? "#10b981" : "#f43f5e" }}>{fund?.pillar_scores?.financial_strength?.score != null ? fund.pillar_scores.financial_strength.score.toFixed(1) + ' / 100' : 'N/A'}</strong></li>
+                  {fund?.metrics?.debt_to_equity?.median != null && (
+                    <li>Debt-to-Equity (Median): <strong>{fund.metrics.debt_to_equity.median.toFixed(2)}</strong></li>
+                  )}
+                  {fund?.metrics?.borrowing_change_pct?.median != null && (
+                    <li>Borrowing Change: <strong>{fund.metrics.borrowing_change_pct.median.toFixed(1)}%</strong></li>
+                  )}
+                  {fund?.metrics?.latest_ocf_to_pat?.median != null && (
+                    <li>OCF to PAT Ratio: <strong>{fund.metrics.latest_ocf_to_pat.median.toFixed(2)}</strong></li>
+                  )}
+                  <li>Financial Strength Score: <strong style={{ color: (fund?.pillar_scores?.financial_strength?.score || 0) >= 50 ? "#10b981" : "#f43f5e" }}>{fund?.pillar_scores?.financial_strength?.score != null ? fund.pillar_scores.financial_strength.score.toFixed(1) + ' / 100' : 'N/A'}</strong></li>
+                  {fund?.pillar_scores?.earnings_quality?.score != null && (
+                    <li>Earnings Quality Score: <strong style={{ color: fund.pillar_scores.earnings_quality.score >= 50 ? "#10b981" : "#f43f5e" }}>{fund.pillar_scores.earnings_quality.score.toFixed(1)} / 100</strong></li>
+                  )}
                 </ul>
+              </div>
+            </div>
+          </div>
+
+          {/* Macro Analysis Card */}
+          <div className="panel run-card">
+            <div className="run-card-header">
+              <div>
+                <h3>Macro Analysis Breakdown</h3>
+                <div style={{ fontSize: "0.82rem", color: "var(--text-secondary)", marginTop: "2px" }}>
+                  Macroeconomic trends, sector policy alignment & market sentiment.
+                </div>
+              </div>
+              <ScoreCell score={groupDetails.macro_score} />
+            </div>
+            <ScoreBar score={groupDetails.macro_score} />
+
+            <div className="run-card-content" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
+              <div className="run-card-section">
+                <h4>Economic Indicators & Alignment</h4>
+                <ul className="run-card-list">
+                  {macro?.categories ? Object.entries(macro.categories).map(([catKey, catVal]: [string, any]) => (
+                    <li key={catKey}>
+                      <span style={{ fontWeight: 600 }}>{catKey.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')}:</span>
+                      <span className={catVal.impact === 'POSITIVE' ? 'score-high' : catVal.impact === 'NEGATIVE' ? 'score-low' : 'score-mid'}>
+                        {catVal.impact} ({catVal.numeric_value ?? 'N/A'} pts)
+                      </span>
+                    </li>
+                  )) : <li>Sector aligned with macroeconomic trends & market conditions.</li>}
+                </ul>
+              </div>
+              <div className="run-card-section">
+                <h4>Macro Outlook Summary</h4>
+                <div style={{ padding: "12px", background: "#18181b", borderRadius: "8px", border: "1px solid #27272a" }}>
+                  <span className={`badge ${macro?.llm_overall_impact === 'POSITIVE' ? 'completed' : macro?.llm_overall_impact === 'NEGATIVE' ? 'error' : 'pending'}`}>
+                    {macro?.llm_overall_impact || "NEUTRAL"} OUTLOOK
+                  </span>
+                  <p style={{ margin: "8px 0 0 0", fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+                    {macro?.llm_summary || macro?.reasoning || "Macro parameters align favorably with standard sector metrics."}
+                  </p>
+                </div>
               </div>
             </div>
           </div>

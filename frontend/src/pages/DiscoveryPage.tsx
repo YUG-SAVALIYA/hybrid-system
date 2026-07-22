@@ -493,6 +493,7 @@ function GroupTable({
               {showParentIndustry && <th>Parent Industry</th>}
               <th>Technical Score (0-100)</th>
               <th>Fundamental Score (0-100)</th>
+              <th>Macro Score (0-100)</th>
               <th>Final Score (0-100)</th>
               <th>Stocks Analyzed</th>
               <th>Data Coverage %</th>
@@ -517,6 +518,9 @@ function GroupTable({
                 </td>
                 <td>
                   <ScoreCell score={group.fundamental_score} />
+                </td>
+                <td>
+                  <ScoreCell score={group.macro_score} />
                 </td>
                 <td>
                   <ScoreCell score={group.final_score} />
