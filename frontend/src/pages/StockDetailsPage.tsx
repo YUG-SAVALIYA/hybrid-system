@@ -1,26 +1,16 @@
 import { useEffect, useState } from "react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from "recharts";
+import { ScoreCell, ScoreExplanationBanner } from "../components/ExplanationBanner";
+
 function ScoreBar({ score }: { score: number | null }) {
-  if (score === null || isNaN(score)) return <div style={{ background: 'var(--panel-border)', height: '6px', borderRadius: '3px', width: '100%', marginBottom: '16px' }} />;
+  if (score === null || isNaN(score)) return <div style={{ background: '#27272a', height: '6px', borderRadius: '3px', width: '100%', marginBottom: '16px' }} />;
   const width = `${Math.min(Math.max(score, 0), 100)}%`;
-  const color = score >= 70 ? 'var(--success)' : score < 40 ? 'var(--danger)' : 'var(--warning)';
+  const color = score >= 75 ? '#10b981' : score < 50 ? '#f43f5e' : '#f59e0b';
   
   return (
-    <div style={{ background: 'var(--panel-border)', height: '6px', borderRadius: '3px', width: '100%', overflow: 'hidden', marginBottom: '16px' }}>
-      <div style={{ width, background: color, height: '100%', transition: 'width 1s ease-out' }} />
-    </div>
-  );
-}
-
-
-function MiniBarChart({ score }: { score: number | undefined | null }) {
-  if (score === undefined || score === null || isNaN(score)) return null;
-  const width = `${Math.min(Math.max(score, 0), 100)}%`;
-  const color = score >= 70 ? 'var(--success)' : score < 40 ? 'var(--danger)' : 'var(--warning)';
-  return (
-    <div style={{ display: 'inline-block', width: '60px', height: '6px', background: 'var(--panel-border)', borderRadius: '3px', overflow: 'hidden', marginLeft: '8px', verticalAlign: 'middle' }}>
-      <div style={{ width, background: color, height: '100%' }} />
+    <div style={{ background: '#27272a', height: '6px', borderRadius: '3px', width: '100%', overflow: 'hidden', marginBottom: '16px' }}>
+      <div style={{ width, background: color, height: '100%', transition: 'width 0.5s ease-out' }} />
     </div>
   );
 }
@@ -34,20 +24,20 @@ function ConsistencyChart({ periods }: { periods: any[] }) {
   }));
   
   return (
-    <div style={{ height: 300, width: '100%', marginTop: '32px' }}>
-      <h4 style={{ marginBottom: '16px' }}>Consistency Breakdown</h4>
-      <ResponsiveContainer width="100%" height="100%">
+    <div style={{ height: 280, width: '100%', marginTop: '24px', background: "#18181b", padding: "16px", borderRadius: "12px", border: "1px solid #27272a" }}>
+      <h4 style={{ marginBottom: '12px', color: "#ffffff" }}>📊 5-Period Stock Return vs Benchmark</h4>
+      <ResponsiveContainer width="100%" height="80%">
         <BarChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-          <XAxis dataKey="name" stroke="var(--text-secondary)" tick={{fontSize: 12}} />
-          <YAxis stroke="var(--text-secondary)" tick={{fontSize: 12}} tickFormatter={(val) => `${val}%`} />
+          <XAxis dataKey="name" stroke="#a1a1aa" tick={{fontSize: 12}} />
+          <YAxis stroke="#a1a1aa" tick={{fontSize: 12}} tickFormatter={(val) => `${val}%`} />
           <Tooltip 
-             contentStyle={{ background: 'var(--panel-bg)', borderColor: 'var(--panel-border)', borderRadius: '8px' }}
+             contentStyle={{ background: '#121215', borderColor: '#27272a', borderRadius: '8px', color: '#ffffff' }}
              formatter={(value: any) => `${Number(value).toFixed(2)}%`}
           />
-          <Legend />
-          <ReferenceLine y={0} stroke="var(--panel-border)" />
-          <Bar dataKey="company" name="Company Return" fill="var(--primary)" radius={[4, 4, 0, 0]} />
-          <Bar dataKey="benchmark" name="Benchmark Return" fill="var(--text-secondary)" radius={[4, 4, 0, 0]} />
+          <Legend wrapperStyle={{ color: "#a1a1aa", fontSize: "0.85rem" }} />
+          <ReferenceLine y={0} stroke="#3f3f46" />
+          <Bar dataKey="company" name="Company Stock Return" fill="#ffffff" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="benchmark" name="Benchmark Return" fill="#71717a" radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -84,8 +74,8 @@ export function StockDetailsPage() {
     return () => { active = false; };
   }, [runId, symbol, horizon]);
 
-  if (loading) return <div className="empty-state">Loading stock analysis...</div>;
-  if (!constituent) return <div className="empty-state">Analysis unavailable for {symbol}.</div>;
+  if (loading) return <div className="empty-state">Loading stock analysis for {symbol}...</div>;
+  if (!constituent) return <div className="empty-state">Detailed analysis unavailable for {symbol}.</div>;
 
   const c = constituent;
   const tech = c.tech_details;
@@ -94,45 +84,49 @@ export function StockDetailsPage() {
 
   return (
     <div className="discovery-shell">
-      <header className="page-header" style={{ display: 'flex', gap: '24px', alignItems: 'center' }}>
-        <button onClick={() => navigate(-1)} className="secondary" style={{ padding: '8px 16px', height: '40px', background: 'var(--panel-bg)', borderColor: 'var(--panel-border)' }}>&larr; Back</button>
+      <header className="page-header" style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+        <button onClick={() => navigate(-1)} className="secondary" style={{ padding: '8px 18px', height: '40px', flexShrink: 0 }}>&larr; Back to Results</button>
         <div>
-          <p className="eyebrow">{c.sector} &rsaquo; {c.industry}</p>
-          <h1 style={{ marginBottom: 0 }}>{c.symbol}</h1>
+          <p className="eyebrow" style={{ color: "var(--text-muted)", fontSize: "0.8rem", textTransform: "uppercase" }}>
+            {c.sector} &rsaquo; {c.industry}
+          </p>
+          <h1 style={{ margin: "2px 0 0 0" }}>{c.symbol} Stock Deep Dive</h1>
         </div>
       </header>
 
-      <div className="dashboard-grid">
+      <ScoreExplanationBanner />
+
+      <div className="dashboard-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))" }}>
         {/* Technical Card */}
         <div className="panel run-card">
           <div className="run-card-header">
-            <h3>Technical Details</h3>
-            <span className={`badge ${c.technical_score != null && c.technical_score >= 70 ? "completed" : c.technical_score != null && c.technical_score < 40 ? "error" : "warning"}`}>
-              Score: {c.technical_score != null ? c.technical_score.toFixed(1) : "-"}
-            </span>
+            <div>
+              <h3>Technical Momentum & Trend</h3>
+              <div style={{ fontSize: "0.82rem", color: "var(--text-secondary)", marginTop: "2px" }}>
+                Price relative return, volume profile & 5-period trend consistency.
+              </div>
+            </div>
+            <ScoreCell score={c.technical_score} />
           </div>
           <ScoreBar score={c.technical_score} />
+
           <div className="run-card-content">
             <div className="run-card-section">
               <h4>Momentum Indicators</h4>
               <ul className="run-card-list">
                 <li>
-                  <span className="run-card-rank">CR</span> 
-                  <span>Relative Return: <span className={relative_return >= 0 ? "score-high" : "score-low"}>{relative_return != null ? relative_return.toFixed(2) + '%' : '-'}</span></span>
+                  <span>Relative Return vs Benchmark:</span>
+                  <strong style={{ color: relative_return >= 0 ? "#10b981" : "#f43f5e" }}>
+                    {relative_return != null ? (relative_return >= 0 ? `+${relative_return.toFixed(2)}%` : `${relative_return.toFixed(2)}%`) : '-'}
+                  </strong>
                 </li>
                 <li>
-                  <span className="run-card-rank">VC</span> 
-                  <span style={{ display: 'flex', alignItems: 'center' }}>
-                    Volume Score: <span style={{ marginLeft: '4px' }}>{tech?.technical_score?.components?.volume?.score?.toFixed(1) || '-'} pts</span>
-                    <MiniBarChart score={tech?.technical_score?.components?.volume?.score} />
-                  </span>
+                  <span>Volume & Accumulation Score:</span>
+                  <strong>{tech?.technical_score?.components?.volume?.score ? `${tech.technical_score.components.volume.score.toFixed(1)} / 100` : '-'}</strong>
                 </li>
                 <li>
-                  <span className="run-card-rank">CO</span> 
-                  <span style={{ display: 'flex', alignItems: 'center' }}>
-                    Consistency Score: <span style={{ marginLeft: '4px' }}>{tech?.consistency?.company_consistency_score?.toFixed(1) || '-'} pts</span>
-                    <MiniBarChart score={tech?.consistency?.company_consistency_score} />
-                  </span>
+                  <span>Consistency Score:</span>
+                  <strong>{tech?.consistency?.company_consistency_score ? `${tech.consistency.company_consistency_score.toFixed(1)} / 100` : '-'}</strong>
                 </li>
               </ul>
               
@@ -144,45 +138,50 @@ export function StockDetailsPage() {
         {/* Fundamental Card */}
         <div className="panel run-card">
           <div className="run-card-header">
-            <h3>Fundamental Details</h3>
-            <span className={`badge ${c.fundamental_score != null && c.fundamental_score >= 70 ? "completed" : c.fundamental_score != null && c.fundamental_score < 40 ? "error" : "warning"}`}>
-              Score: {c.fundamental_score != null ? c.fundamental_score.toFixed(1) : "-"}
-            </span>
+            <div>
+              <h3>Fundamental Financial Ratios</h3>
+              <div style={{ fontSize: "0.82rem", color: "var(--text-secondary)", marginTop: "2px" }}>
+                Sales growth, operating margins, leverage safety & cash flow quality.
+              </div>
+            </div>
+            <ScoreCell score={c.fundamental_score} />
           </div>
           <ScoreBar score={c.fundamental_score} />
-          <div className="run-card-content" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+
+          <div className="run-card-content" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
             <div className="run-card-section">
-              <h4>1. Growth</h4>
+              <h4>1. Revenue & Earnings Growth</h4>
               <ul className="run-card-list">
-                <li><span className="run-card-rank">SG</span> <span>Sales Growth: <span className={(fund?.peer_benchmarks?.metrics?.sales_growth_pct?.company_value || 0) >= 0 ? "score-high" : "score-low"}>{fund?.peer_benchmarks?.metrics?.sales_growth_pct?.company_value != null ? fund.peer_benchmarks.metrics.sales_growth_pct.company_value.toFixed(2) + '%' : '-'}</span></span></li>
-                <li><span className="run-card-rank">NG</span> <span>Net Profit Growth: <span className={(fund?.peer_benchmarks?.metrics?.net_profit_growth_pct?.company_value || 0) >= 0 ? "score-high" : "score-low"}>{fund?.peer_benchmarks?.metrics?.net_profit_growth_pct?.company_value != null ? fund.peer_benchmarks.metrics.net_profit_growth_pct.company_value.toFixed(2) + '%' : '-'}</span></span></li>
+                <li>Sales Growth: <strong>{fund?.peer_benchmarks?.metrics?.sales_growth_pct?.company_value != null ? fund.peer_benchmarks.metrics.sales_growth_pct.company_value.toFixed(2) + '%' : '-'}</strong></li>
+                <li>Net Profit Growth: <strong>{fund?.peer_benchmarks?.metrics?.net_profit_growth_pct?.company_value != null ? fund.peer_benchmarks.metrics.net_profit_growth_pct.company_value.toFixed(2) + '%' : '-'}</strong></li>
               </ul>
             </div>
+
             <div className="run-card-section">
-              <h4>2. Profitability</h4>
+              <h4>2. Profit Margins</h4>
               <ul className="run-card-list">
-                <li><span className="run-card-rank">OM</span> <span>Op Margin: <span>{fund?.peer_benchmarks?.metrics?.latest_operating_margin_pct?.company_value != null ? fund.peer_benchmarks.metrics.latest_operating_margin_pct.company_value.toFixed(2) + '%' : '-'}</span></span></li>
-                <li><span className="run-card-rank">MT</span> <span>Margin Trend: <span>{fund?.peer_benchmarks?.metrics?.operating_margin_change_pp?.company_value != null ? fund.peer_benchmarks.metrics.operating_margin_change_pp.company_value.toFixed(2) + ' pp' : '-'}</span></span></li>
+                <li>Operating Margin: <strong>{fund?.peer_benchmarks?.metrics?.latest_operating_margin_pct?.company_value != null ? fund.peer_benchmarks.metrics.latest_operating_margin_pct.company_value.toFixed(2) + '%' : '-'}</strong></li>
+                <li>Margin Expansion: <strong>{fund?.peer_benchmarks?.metrics?.operating_margin_change_pp?.company_value != null ? fund.peer_benchmarks.metrics.operating_margin_change_pp.company_value.toFixed(2) + ' pp' : '-'}</strong></li>
               </ul>
             </div>
+
             <div className="run-card-section">
-              <h4>3. Fin. Strength</h4>
+              <h4>3. Balance Sheet Safety</h4>
               <ul className="run-card-list">
-                <li><span className="run-card-rank">DE</span> <span>Debt/Equity: <span>{fund?.peer_benchmarks?.metrics?.debt_to_equity?.company_value != null ? fund.peer_benchmarks.metrics.debt_to_equity.company_value.toFixed(2) : '-'}</span></span></li>
-                <li><span className="run-card-rank">BC</span> <span>Borrowing Change: <span>{fund?.peer_benchmarks?.metrics?.borrowing_change_pct?.company_value != null ? fund.peer_benchmarks.metrics.borrowing_change_pct.company_value.toFixed(2) + '%' : '-'}</span></span></li>
+                <li>Debt-to-Equity: <strong>{fund?.peer_benchmarks?.metrics?.debt_to_equity?.company_value != null ? fund.peer_benchmarks.metrics.debt_to_equity.company_value.toFixed(2) : '-'}</strong></li>
+                <li>Borrowing Change: <strong>{fund?.peer_benchmarks?.metrics?.borrowing_change_pct?.company_value != null ? fund.peer_benchmarks.metrics.borrowing_change_pct.company_value.toFixed(2) + '%' : '-'}</strong></li>
               </ul>
             </div>
+
             <div className="run-card-section">
-              <h4>4. Earn Quality</h4>
+              <h4>4. Cash Flow & Quality</h4>
               <ul className="run-card-list">
-                <li><span className="run-card-rank">OC</span> <span>OCF to PAT: <span>{fund?.peer_benchmarks?.metrics?.latest_ocf_to_pat?.company_value != null ? fund.peer_benchmarks.metrics.latest_ocf_to_pat.company_value.toFixed(2) : '-'}</span></span></li>
-                <li><span className="run-card-rank">PV</span> <span>Profit Volatility: <span>{fund?.peer_benchmarks?.metrics?.profit_volatility?.company_value != null ? fund.peer_benchmarks.metrics.profit_volatility.company_value.toFixed(2) : '-'}</span></span></li>
-                <li><span className="run-card-rank">PH</span> <span>Profit History: <span>{fund?.peer_benchmarks?.metrics?.profit_history?.company_value != null ? fund.peer_benchmarks.metrics.profit_history.company_value.toFixed(2) + '%' : '-'}</span></span></li>
+                <li>OCF to PAT Ratio: <strong>{fund?.peer_benchmarks?.metrics?.latest_ocf_to_pat?.company_value != null ? fund.peer_benchmarks.metrics.latest_ocf_to_pat.company_value.toFixed(2) : '-'}</strong></li>
+                <li>Profitable History: <strong>{fund?.peer_benchmarks?.metrics?.profit_history?.company_value != null ? fund.peer_benchmarks.metrics.profit_history.company_value.toFixed(2) + '%' : '-'}</strong></li>
               </ul>
             </div>
           </div>
         </div>
-
 
       </div>
     </div>
