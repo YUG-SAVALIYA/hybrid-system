@@ -60,24 +60,24 @@ export function DashboardPage() {
 
       {/* Stats Summary Bar */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px", marginBottom: "8px" }}>
-        <div className="panel" style={{ padding: "16px 20px" }}>
-          <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 600 }}>Total Discovery Runs</div>
-          <div style={{ fontSize: "1.8rem", fontWeight: 700, color: "#ffffff", marginTop: "4px" }}>{runs.length}</div>
+        <div className="panel" style={{ padding: "14px 18px" }}>
+          <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 600 }}>Total Discovery Runs</div>
+          <div style={{ fontSize: "1.6rem", fontWeight: 700, color: "#ffffff", marginTop: "2px" }}>{runs.length}</div>
         </div>
-        <div className="panel" style={{ padding: "16px 20px" }}>
-          <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 600 }}>Completed Pipelines</div>
-          <div style={{ fontSize: "1.8rem", fontWeight: 700, color: "var(--success)", marginTop: "4px" }}>{completedCount}</div>
+        <div className="panel" style={{ padding: "14px 18px" }}>
+          <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 600 }}>Completed Pipelines</div>
+          <div style={{ fontSize: "1.6rem", fontWeight: 700, color: "var(--success)", marginTop: "2px" }}>{completedCount}</div>
         </div>
-        <div className="panel" style={{ padding: "16px 20px" }}>
-          <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 600 }}>Latest Pipeline Run</div>
-          <div style={{ fontSize: "1.05rem", fontWeight: 600, color: "#ffffff", marginTop: "8px" }}>
+        <div className="panel" style={{ padding: "14px 18px" }}>
+          <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 600 }}>Latest Pipeline Run</div>
+          <div style={{ fontSize: "0.98rem", fontWeight: 600, color: "#ffffff", marginTop: "6px" }}>
             {runs[0]?.started_at ? new Date(runs[0].started_at).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "N/A"}
           </div>
         </div>
       </div>
 
       {/* Search & Filter Bar */}
-      <div className="table-filter-bar" style={{ marginTop: "12px" }}>
+      <div className="table-filter-bar" style={{ marginTop: "8px" }}>
         <div className="search-input-wrap" style={{ maxWidth: "450px" }}>
           <span className="search-icon">🔍</span>
           <input
@@ -93,19 +93,20 @@ export function DashboardPage() {
       </div>
 
       {/* Runs Grid */}
-      <div className="dashboard-grid">
+      <div className="dashboard-grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))", gap: "16px" }}>
         {filteredRuns.map((run) => {
           const isCompleted = run.status.startsWith("COMPLETED");
           const isFailed = run.status === "FAILED";
           const statusBadge = isFailed ? "error" : isCompleted ? "completed" : "pending";
+          const hasData = run.top_sectors.length > 0 || run.top_industries.length > 0 || run.top_stocks.length > 0;
 
           return (
-            <div key={run.run_id} className="run-card">
+            <div key={run.run_id} className="run-card" style={{ padding: "16px 18px" }}>
               <div>
-                <div className="run-card-header">
+                <div className="run-card-header" style={{ marginBottom: "12px" }}>
                   <div>
-                    <h3 style={{ fontSize: "1.05rem" }}>Run: {run.run_date || run.run_id}</h3>
-                    <div className="run-card-date">
+                    <h3 style={{ fontSize: "1rem", margin: 0 }}>Run: {run.run_date || run.run_id}</h3>
+                    <div className="run-card-date" style={{ fontSize: "0.75rem" }}>
                       {run.started_at ? new Date(run.started_at).toLocaleString() : run.run_id}
                     </div>
                   </div>
@@ -114,28 +115,34 @@ export function DashboardPage() {
                   </span>
                 </div>
 
-                <div className="run-card-content">
-                  <SummaryList title="Top Rated Sectors" items={run.top_sectors} badgeColor="var(--success)" />
-                  <SummaryList title="Top Industries" items={run.top_industries} badgeColor="#38bdf8" />
-                  <SummaryList title="Top Basic Industries" items={run.top_basic_industries} badgeColor="#a855f7" />
-                  <SummaryList title="Top Ranked Stocks" items={run.top_stocks} badgeColor="#f59e0b" />
-                </div>
+                {!hasData ? (
+                  <div style={{ padding: "16px", background: "#18181b", borderRadius: "8px", border: "1px solid #27272a", fontSize: "0.82rem", color: "var(--text-muted)", textAlign: "center" }}>
+                    ⚠️ No output selection data (Run incomplete or failed)
+                  </div>
+                ) : (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
+                    <SummaryGroup title="Sectors" items={run.top_sectors} badgeColor="#10b981" />
+                    <SummaryGroup title="Industries" items={run.top_industries} badgeColor="#38bdf8" />
+                    <SummaryGroup title="Basic Industries" items={run.top_basic_industries} badgeColor="#a855f7" />
+                    <SummaryGroup title="Stocks" items={run.top_stocks} badgeColor="#f59e0b" />
+                  </div>
+                )}
               </div>
 
-              <div style={{ display: "flex", gap: "10px", marginTop: "16px", paddingTop: "14px", borderTop: "1px solid var(--panel-border)" }}>
+              <div style={{ display: "flex", gap: "10px", marginTop: "12px", paddingTop: "12px", borderTop: "1px solid var(--panel-border)" }}>
                 <button
                   onClick={() => navigate(`/discovery/${run.run_id}/SECTORS`)}
                   className="primary"
-                  style={{ flex: 1 }}
+                  style={{ flex: 1, minHeight: "34px", fontSize: "0.82rem" }}
                 >
-                  📊 View Sectors
+                  📊 Sectors
                 </button>
                 <button
                   onClick={() => navigate(`/discovery/${run.run_id}/STOCKS`)}
                   className="secondary"
-                  style={{ flex: 1 }}
+                  style={{ flex: 1, minHeight: "34px", fontSize: "0.82rem" }}
                 >
-                  📈 View Stocks
+                  📈 Stocks
                 </button>
               </div>
             </div>
@@ -146,26 +153,47 @@ export function DashboardPage() {
   );
 }
 
-function SummaryList({ title, items, badgeColor }: { title: string; items: { name: string; rank?: number | null }[]; badgeColor?: string }) {
+function SummaryGroup({ title, items, badgeColor }: { title: string; items: { name: string; rank?: number | null }[]; badgeColor?: string }) {
+  if (items.length === 0) return null;
+  
   return (
-    <div className="run-card-section">
-      <h4>{title}</h4>
-      {items.length === 0 ? (
-        <div style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>No data available for this run</div>
-      ) : (
-        <ul className="run-card-list">
-          {items.slice(0, 3).map((item, i) => (
-            <li key={i}>
-              <span className="run-card-rank" style={badgeColor ? { background: badgeColor, color: "#000" } : {}}>
-                #{item.rank || i + 1}
-              </span>
-              <span style={{ fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {item.name}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
+    <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+      <h4 style={{ fontSize: "0.72rem", margin: 0 }}>{title}</h4>
+      <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+        {items.slice(0, 2).map((item, i) => (
+          <div
+            key={i}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              fontSize: "0.8rem",
+              background: "#18181b",
+              padding: "4px 8px",
+              borderRadius: "6px",
+              border: "1px solid #27272a",
+              overflow: "hidden",
+            }}
+          >
+            <span
+              style={{
+                fontSize: "0.68rem",
+                fontWeight: 700,
+                background: badgeColor || "#27272a",
+                color: "#000000",
+                padding: "1px 5px",
+                borderRadius: "3px",
+                flexShrink: 0,
+              }}
+            >
+              #{item.rank || i + 1}
+            </span>
+            <span style={{ fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "#f4f4f5" }}>
+              {item.name}
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
