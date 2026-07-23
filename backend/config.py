@@ -103,18 +103,18 @@ MIN_BASIC_INDUSTRY_MACRO_COVERAGE = float(os.environ.get("MIN_BASIC_INDUSTRY_MAC
 
 # Final sector discovery ranking
 MIN_SECTOR_DISCOVERY_COVERAGE = float(os.environ.get("MIN_SECTOR_DISCOVERY_COVERAGE", 0.0))
-SECTOR_SELECTION_COUNT = int(os.environ.get("SECTOR_SELECTION_COUNT", 3))
+SECTOR_SELECTION_COUNT = int(os.environ.get("SECTOR_SELECTION_COUNT", 9999))
 
 # Final industry discovery ranking
 MIN_INDUSTRY_DISCOVERY_COVERAGE = float(os.environ.get("MIN_INDUSTRY_DISCOVERY_COVERAGE", 0.0))
-INDUSTRY_SELECTION_COUNT = int(os.environ.get("INDUSTRY_SELECTION_COUNT", 3))
+INDUSTRY_SELECTION_COUNT = int(os.environ.get("INDUSTRY_SELECTION_COUNT", 9999))
 
 # Final basic-industry discovery ranking
 MIN_BASIC_INDUSTRY_DISCOVERY_COVERAGE = float(os.environ.get("MIN_BASIC_INDUSTRY_DISCOVERY_COVERAGE", 0.0))
-BASIC_INDUSTRY_SELECTION_COUNT = int(os.environ.get("BASIC_INDUSTRY_SELECTION_COUNT", 2))
+BASIC_INDUSTRY_SELECTION_COUNT = int(os.environ.get("BASIC_INDUSTRY_SELECTION_COUNT", 9999))
 
 # Final stock candidate scoring
 MIN_STOCK_SCORE_COVERAGE = float(os.environ.get("MIN_STOCK_SCORE_COVERAGE", 0.0))
 
 # Final stock discovery ranking
-STOCK_SELECTION_COUNT = int(os.environ.get("STOCK_SELECTION_COUNT", 3))
+STOCK_SELECTION_COUNT = int(os.environ.get("STOCK_SELECTION_COUNT", 9999))

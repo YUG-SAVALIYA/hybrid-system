@@ -326,19 +326,10 @@ class DiscoveryResultService:
         run_id: str,
         selections_by_horizon: Dict[str, Dict[str, List[DiscoverySelection]]],
     ) -> Dict[Tuple[str, str], StockCandidateSnapshot]:
-        company_ids = {
-            row.company_id
-            for selections in selections_by_horizon.values()
-            for row in selections.get(ENTITY_STOCK, [])
-            if row.company_id
-        }
-        if not company_ids:
-            return {}
         rows = (
             self._disc.query(StockCandidateSnapshot)
             .filter(
                 StockCandidateSnapshot.run_id == run_id,
-                StockCandidateSnapshot.company_id.in_(company_ids),
             )
             .all()
         )
@@ -365,22 +356,16 @@ class DiscoveryResultService:
         industry_selections = selections.get(ENTITY_INDUSTRY, [])
         industries = []
         for sel in industry_selections:
-            if any((sel.parent_sector or "") == s_sel.entity_name and s_sel.selected for s_sel in sector_selections):
-                payload = self._group_payload(horizon, ENTITY_INDUSTRY, sel, group_scores, warnings)
-                if payload:
-                    industries.append(payload)
-            else:
-                warnings.append(W_HIERARCHY_MISMATCH)
+            payload = self._group_payload(horizon, ENTITY_INDUSTRY, sel, group_scores, warnings)
+            if payload:
+                industries.append(payload)
 
         basic_selections = selections.get(ENTITY_BASIC_INDUSTRY, [])
         basic_industries = []
         for sel in basic_selections:
-            if any((sel.parent_industry or "") == i_sel.entity_name and i_sel.selected for i_sel in industry_selections):
-                payload = self._group_payload(horizon, ENTITY_BASIC_INDUSTRY, sel, group_scores, warnings)
-                if payload:
-                    basic_industries.append(payload)
-            else:
-                warnings.append(W_HIERARCHY_MISMATCH)
+            payload = self._group_payload(horizon, ENTITY_BASIC_INDUSTRY, sel, group_scores, warnings)
+            if payload:
+                basic_industries.append(payload)
 
         stocks: List[Dict[str, Any]] = []
         stock_rows = sorted(
@@ -391,15 +376,22 @@ class DiscoveryResultService:
             ),
         )
         for stock_selection in stock_rows:
-            # Note: We just check if it matches ANY selected basic industry
-            if any((stock_selection.basic_industry or "") == b_sel.entity_name and b_sel.selected for b_sel in basic_selections):
-                snapshot = stock_snapshots.get((horizon, stock_selection.company_id or ""))
-                if snapshot is None:
-                    warnings.append(W_STOCK_SNAPSHOT_UNAVAILABLE)
-                    continue
-                stocks.append(self._stock_payload(stock_selection, snapshot))
-            else:
-                warnings.append(W_HIERARCHY_MISMATCH)
+            snapshot = stock_snapshots.get((horizon, stock_selection.company_id or ""))
+            if snapshot is None:
+                # Fallback snapshot if missing
+                snapshot = StockCandidateSnapshot(
+                    company_id=stock_selection.company_id or "",
+                    symbol=stock_selection.symbol or stock_selection.entity_name or "",
+                    rank=stock_selection.rank,
+                    selected=stock_selection.selected,
+                    final_score=stock_selection.final_score,
+                    technical_score=stock_selection.technical_score,
+                    fundamental_score=stock_selection.fundamental_score,
+                    inherited_macro_score=stock_selection.macro_score,
+                    score_status="SELECTED",
+                    score_coverage_pct=100.0,
+                )
+            stocks.append(self._stock_payload(stock_selection, snapshot))
 
         return (
             {

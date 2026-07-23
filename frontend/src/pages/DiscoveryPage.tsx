@@ -455,20 +455,48 @@ function GroupTable({
   onRowClick?: (name: string, parentSector: string, parentIndustry: string) => void;
 }) {
   const [filter, setFilter] = useState("");
+  const [sortField, setSortField] = useState<string>("rank");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   if (!groups.length) return <div className="empty-state">No {title.toLowerCase()} found for this horizon.</div>;
 
-  const filtered = groups.filter(
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDir(["name", "rank"].includes(field) ? "asc" : "desc");
+    }
+  };
+
+  const sortedGroups = [...groups].sort((a, b) => {
+    let valA: any = 0;
+    let valB: any = 0;
+    if (sortField === "rank") { valA = a.rank ?? 9999; valB = b.rank ?? 9999; }
+    else if (sortField === "name") { return sortDir === "asc" ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name); }
+    else if (sortField === "tech") { valA = a.technical_score ?? -1; valB = b.technical_score ?? -1; }
+    else if (sortField === "fund") { valA = a.fundamental_score ?? -1; valB = b.fundamental_score ?? -1; }
+    else if (sortField === "macro") { valA = a.macro_score ?? -1; valB = b.macro_score ?? -1; }
+    else if (sortField === "final") { valA = a.final_score ?? -1; valB = b.final_score ?? -1; }
+    else if (sortField === "stocks") { valA = a.constituent_count ?? 0; valB = b.constituent_count ?? 0; }
+    else if (sortField === "coverage") { valA = a.coverage_pct ?? -1; valB = b.coverage_pct ?? -1; }
+
+    return sortDir === "asc" ? (valA > valB ? 1 : valA < valB ? -1 : 0) : (valA < valB ? 1 : valA > valB ? -1 : 0);
+  });
+
+  const filtered = sortedGroups.filter(
     (g) =>
       g.name.toLowerCase().includes(filter.toLowerCase()) ||
       (g.parent_sector && g.parent_sector.toLowerCase().includes(filter.toLowerCase())) ||
       (g.parent_industry && g.parent_industry.toLowerCase().includes(filter.toLowerCase()))
   );
 
+  const sortIndicator = (field: string) => sortField === field ? (sortDir === "asc" ? " ▲" : " ▼") : "";
+
   return (
     <div>
-      <div className="table-filter-bar">
-        <div className="search-input-wrap">
+      <div className="table-filter-bar" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+        <div className="search-input-wrap" style={{ flex: "1 1 300px" }}>
           <span className="search-icon">🔍</span>
           <input
             type="text"
@@ -477,26 +505,50 @@ function GroupTable({
             onChange={(e) => setFilter(e.target.value)}
           />
         </div>
-        <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
-          Showing <strong>{filtered.length}</strong> of <strong>{groups.length}</strong> {title.toLowerCase()}
+        
+        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.82rem" }}>
+            <span style={{ color: "var(--text-secondary)" }}>Sort by:</span>
+            <select
+              value={`${sortField}-${sortDir}`}
+              onChange={(e) => {
+                const [f, d] = e.target.value.split("-");
+                setSortField(f);
+                setSortDir(d as "asc" | "desc");
+              }}
+              style={{ background: "#18181b", color: "#fff", border: "1px solid #3f3f46", borderRadius: "6px", padding: "4px 10px", fontSize: "0.82rem" }}
+            >
+              <option value="rank-asc">Rank (1 → N)</option>
+              <option value="final-desc">Final Score (High → Low)</option>
+              <option value="tech-desc">Technical Score (High → Low)</option>
+              <option value="fund-desc">Fundamental Score (High → Low)</option>
+              <option value="macro-desc">Macro Score (High → Low)</option>
+              <option value="name-asc">Name (A → Z)</option>
+              <option value="stocks-desc">Stocks Count (High → Low)</option>
+            </select>
+          </div>
+
+          <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+            Showing <strong>{filtered.length}</strong> of <strong>{groups.length}</strong> {title.toLowerCase()}
+          </div>
         </div>
       </div>
 
       <div className="table-wrap">
         <table>
-          <caption>Top Ranked {title}</caption>
+          <caption>Ranked {title}</caption>
           <thead>
             <tr>
-              <th>Rank</th>
-              <th>Name</th>
+              <th onClick={() => handleSort("rank")} style={{ cursor: "pointer", userSelect: "none" }}>Rank{sortIndicator("rank")}</th>
+              <th onClick={() => handleSort("name")} style={{ cursor: "pointer", userSelect: "none" }}>Name{sortIndicator("name")}</th>
               {showParentSector && <th>Parent Sector</th>}
               {showParentIndustry && <th>Parent Industry</th>}
-              <th>Technical Score (0-100)</th>
-              <th>Fundamental Score (0-100)</th>
-              <th>Macro Score (0-100)</th>
-              <th>Final Score (0-100)</th>
-              <th>Stocks Analyzed</th>
-              <th>Data Coverage %</th>
+              <th onClick={() => handleSort("tech")} style={{ cursor: "pointer", userSelect: "none" }}>Technical Score (0-100){sortIndicator("tech")}</th>
+              <th onClick={() => handleSort("fund")} style={{ cursor: "pointer", userSelect: "none" }}>Fundamental Score (0-100){sortIndicator("fund")}</th>
+              <th onClick={() => handleSort("macro")} style={{ cursor: "pointer", userSelect: "none" }}>Macro Score (0-100){sortIndicator("macro")}</th>
+              <th onClick={() => handleSort("final")} style={{ cursor: "pointer", userSelect: "none" }}>Final Score (0-100){sortIndicator("final")}</th>
+              <th onClick={() => handleSort("stocks")} style={{ cursor: "pointer", userSelect: "none" }}>Stocks Analyzed{sortIndicator("stocks")}</th>
+              <th onClick={() => handleSort("coverage")} style={{ cursor: "pointer", userSelect: "none" }}>Data Coverage %{sortIndicator("coverage")}</th>
               <th>Status</th>
             </tr>
           </thead>
@@ -551,16 +603,40 @@ function StocksTable({
   onStockSelect?: (stock: { symbol: string; horizon: string }) => void;
 }) {
   const [filter, setFilter] = useState("");
+  const [sortField, setSortField] = useState<string>("rank");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   if (!stocks.length) return <div className="empty-state">No stocks selected for this horizon.</div>;
 
-  const sorted = [...stocks].sort((a, b) => (a.rank || 9999) - (b.rank || 9999));
-  const filtered = sorted.filter((s) => s.symbol.toLowerCase().includes(filter.toLowerCase()));
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDir(["symbol", "rank"].includes(field) ? "asc" : "desc");
+    }
+  };
+
+  const sortedStocks = [...stocks].sort((a, b) => {
+    let valA: any = 0;
+    let valB: any = 0;
+    if (sortField === "rank") { valA = a.rank ?? 9999; valB = b.rank ?? 9999; }
+    else if (sortField === "symbol") { return sortDir === "asc" ? a.symbol.localeCompare(b.symbol) : b.symbol.localeCompare(a.symbol); }
+    else if (sortField === "final") { valA = a.final_score ?? -1; valB = b.final_score ?? -1; }
+    else if (sortField === "tech") { valA = a.technical_score ?? -1; valB = b.technical_score ?? -1; }
+    else if (sortField === "fund") { valA = a.fundamental_score ?? -1; valB = b.fundamental_score ?? -1; }
+    else if (sortField === "coverage") { valA = a.score_coverage_pct ?? -1; valB = b.score_coverage_pct ?? -1; }
+
+    return sortDir === "asc" ? (valA > valB ? 1 : valA < valB ? -1 : 0) : (valA < valB ? 1 : valA > valB ? -1 : 0);
+  });
+
+  const filtered = sortedStocks.filter((s) => s.symbol.toLowerCase().includes(filter.toLowerCase()));
+  const sortIndicator = (field: string) => sortField === field ? (sortDir === "asc" ? " ▲" : " ▼") : "";
 
   return (
     <div>
-      <div className="table-filter-bar">
-        <div className="search-input-wrap">
+      <div className="table-filter-bar" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+        <div className="search-input-wrap" style={{ flex: "1 1 300px" }}>
           <span className="search-icon">🔍</span>
           <input
             type="text"
@@ -569,22 +645,44 @@ function StocksTable({
             onChange={(e) => setFilter(e.target.value)}
           />
         </div>
-        <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
-          Showing <strong>{filtered.length}</strong> of <strong>{stocks.length}</strong> stocks
+
+        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.82rem" }}>
+            <span style={{ color: "var(--text-secondary)" }}>Sort by:</span>
+            <select
+              value={`${sortField}-${sortDir}`}
+              onChange={(e) => {
+                const [f, d] = e.target.value.split("-");
+                setSortField(f);
+                setSortDir(d as "asc" | "desc");
+              }}
+              style={{ background: "#18181b", color: "#fff", border: "1px solid #3f3f46", borderRadius: "6px", padding: "4px 10px", fontSize: "0.82rem" }}
+            >
+              <option value="rank-asc">Rank (1 → N)</option>
+              <option value="final-desc">Final Composite Score (High → Low)</option>
+              <option value="tech-desc">Technical Score (High → Low)</option>
+              <option value="fund-desc">Fundamental Score (High → Low)</option>
+              <option value="symbol-asc">Symbol (A → Z)</option>
+            </select>
+          </div>
+
+          <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
+            Showing <strong>{filtered.length}</strong> of <strong>{stocks.length}</strong> stocks
+          </div>
         </div>
       </div>
 
       <div className="table-wrap">
         <table>
-          <caption>Selected Top Stock Recommendations</caption>
+          <caption>Stock Recommendations</caption>
           <thead>
             <tr>
-              <th>Rank</th>
-              <th>Symbol</th>
-              <th>Final Composite Score (0-100)</th>
-              <th>Technical Score (0-100)</th>
-              <th>Fundamental Score (0-100)</th>
-              <th>Data Coverage %</th>
+              <th onClick={() => handleSort("rank")} style={{ cursor: "pointer", userSelect: "none" }}>Rank{sortIndicator("rank")}</th>
+              <th onClick={() => handleSort("symbol")} style={{ cursor: "pointer", userSelect: "none" }}>Symbol{sortIndicator("symbol")}</th>
+              <th onClick={() => handleSort("final")} style={{ cursor: "pointer", userSelect: "none" }}>Final Composite Score (0-100){sortIndicator("final")}</th>
+              <th onClick={() => handleSort("tech")} style={{ cursor: "pointer", userSelect: "none" }}>Technical Score (0-100){sortIndicator("tech")}</th>
+              <th onClick={() => handleSort("fund")} style={{ cursor: "pointer", userSelect: "none" }}>Fundamental Score (0-100){sortIndicator("fund")}</th>
+              <th onClick={() => handleSort("coverage")} style={{ cursor: "pointer", userSelect: "none" }}>Data Coverage %{sortIndicator("coverage")}</th>
               <th>Analysis Status</th>
             </tr>
           </thead>
