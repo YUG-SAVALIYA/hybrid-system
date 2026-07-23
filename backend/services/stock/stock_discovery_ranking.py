@@ -97,7 +97,7 @@ class StockDiscoveryRankingService:
             eligible = list(matched)
         eligible.sort(
             key=lambda candidate: (
-                -float(candidate.final_score),
+                -_sort_score(candidate.final_score),
                 -_sort_score(candidate.technical_score),
                 -_sort_score(candidate.fundamental_score),
                 candidate.symbol or "",
