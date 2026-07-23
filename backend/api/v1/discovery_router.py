@@ -332,11 +332,12 @@ def execute_discovery_run(
         )
 
     try:
+        target_horizon = request.target_horizon or request.horizon
         result = orchestrator.execute(
             clean_run_id,
             resume=request.resume,
             force_restart=request.force_restart,
-            target_horizon=request.target_horizon,
+            target_horizon=target_horizon,
         )
     except Exception:
         logger.exception("Failed to execute discovery pipeline")

@@ -109,11 +109,12 @@ DiscoveryResultResponse = Union[
 
 
 class DiscoveryExecuteRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="allow")
 
-    resume: StrictBool = True
-    force_restart: StrictBool = False
+    resume: bool = True
+    force_restart: bool = False
     target_horizon: Optional[str] = None
+    horizon: Optional[str] = None
 
 
 class DiscoveryExecuteData(BaseModel):
@@ -146,10 +147,10 @@ DiscoveryExecuteResponse = Union[
 
 
 class DiscoveryPrepareRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="allow")
 
-    resume: StrictBool = True
-    force_restart: StrictBool = False
+    resume: bool = True
+    force_restart: bool = False
 
 
 class DiscoveryPrepareData(BaseModel):
@@ -182,10 +183,10 @@ DiscoveryPrepareResponse = Union[
 
 
 class DiscoveryRunCreateRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="allow")
 
-    run_id: Optional[StrictStr] = None
-    as_of_date: Optional[StrictStr] = None
+    run_id: Optional[str] = None
+    as_of_date: Optional[str] = None
 
 
 class DiscoveryRunCreateData(BaseModel):
