@@ -166,9 +166,11 @@ function SummaryGroup({ title, items, badgeColor }: { title: string; items: { na
   
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "5px", minWidth: 0 }}>
-      <h4 style={{ fontSize: "0.72rem", margin: 0, letterSpacing: "0.06em" }}>{title}</h4>
-      <div style={{ display: "flex", flexDirection: "column", gap: "4px", minWidth: 0 }}>
-        {items.slice(0, 3).map((item, i) => (
+      <h4 style={{ fontSize: "0.72rem", margin: 0, letterSpacing: "0.06em", color: "var(--text-muted)" }}>
+        {title} <span style={{ color: "#ffffff", fontWeight: 700 }}>({items.length})</span>
+      </h4>
+      <div style={{ display: "flex", flexDirection: "column", gap: "4px", minWidth: 0, maxHeight: "220px", overflowY: "auto", paddingRight: "2px" }}>
+        {items.map((item, i) => (
           <div
             key={i}
             style={{

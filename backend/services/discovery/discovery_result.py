@@ -126,24 +126,23 @@ class DiscoveryResultService:
             
             run_h = summary_by_run[run_id]["horizon"]
             if sel.horizon == run_h or not run_h or sel.horizon == "SHORT":
-                if (sel.rank or 9999) <= 3:
-                    item = {
-                        "name": sel.entity_name or sel.symbol,
-                        "rank": sel.rank,
-                        "final_score": None,
-                    }
-                    if sel.entity_type == ENTITY_SECTOR:
-                        if not any(x["name"] == item["name"] for x in summary_by_run[run_id]["top_sectors"]):
-                            summary_by_run[run_id]["top_sectors"].append(item)
-                    elif sel.entity_type == ENTITY_INDUSTRY:
-                        if not any(x["name"] == item["name"] for x in summary_by_run[run_id]["top_industries"]):
-                            summary_by_run[run_id]["top_industries"].append(item)
-                    elif sel.entity_type == ENTITY_BASIC_INDUSTRY:
-                        if not any(x["name"] == item["name"] for x in summary_by_run[run_id]["top_basic_industries"]):
-                            summary_by_run[run_id]["top_basic_industries"].append(item)
-                    elif sel.entity_type == ENTITY_STOCK:
-                        if not any(x["name"] == item["name"] for x in summary_by_run[run_id]["top_stocks"]):
-                            summary_by_run[run_id]["top_stocks"].append(item)
+                item = {
+                    "name": sel.entity_name or sel.symbol,
+                    "rank": sel.rank,
+                    "final_score": None,
+                }
+                if sel.entity_type == ENTITY_SECTOR:
+                    if not any(x["name"] == item["name"] for x in summary_by_run[run_id]["top_sectors"]):
+                        summary_by_run[run_id]["top_sectors"].append(item)
+                elif sel.entity_type == ENTITY_INDUSTRY:
+                    if not any(x["name"] == item["name"] for x in summary_by_run[run_id]["top_industries"]):
+                        summary_by_run[run_id]["top_industries"].append(item)
+                elif sel.entity_type == ENTITY_BASIC_INDUSTRY:
+                    if not any(x["name"] == item["name"] for x in summary_by_run[run_id]["top_basic_industries"]):
+                        summary_by_run[run_id]["top_basic_industries"].append(item)
+                elif sel.entity_type == ENTITY_STOCK:
+                    if not any(x["name"] == item["name"] for x in summary_by_run[run_id]["top_stocks"]):
+                        summary_by_run[run_id]["top_stocks"].append(item)
 
         # Fallback for completed runs that might not have selection records in DiscoverySelection table
         for run in runs:
@@ -159,22 +158,22 @@ class DiscoveryResultService:
                             if h_data.get("sectors") and not run_summary["top_sectors"]:
                                 run_summary["top_sectors"] = [
                                     {"name": s["name"], "rank": s.get("rank") or (i + 1)}
-                                    for i, s in enumerate(h_data["sectors"][:3])
+                                    for i, s in enumerate(h_data["sectors"])
                                 ]
                             if h_data.get("industries") and not run_summary["top_industries"]:
                                 run_summary["top_industries"] = [
                                     {"name": ind["name"], "rank": ind.get("rank") or (i + 1)}
-                                    for i, ind in enumerate(h_data["industries"][:3])
+                                    for i, ind in enumerate(h_data["industries"])
                                 ]
                             if h_data.get("basic_industries") and not run_summary["top_basic_industries"]:
                                 run_summary["top_basic_industries"] = [
                                     {"name": b["name"], "rank": b.get("rank") or (i + 1)}
-                                    for i, b in enumerate(h_data["basic_industries"][:3])
+                                    for i, b in enumerate(h_data["basic_industries"])
                                 ]
                             if h_data.get("stocks") and not run_summary["top_stocks"]:
                                 run_summary["top_stocks"] = [
                                     {"name": stk["symbol"], "rank": stk.get("rank") or (i + 1)}
-                                    for i, stk in enumerate(h_data["stocks"][:3])
+                                    for i, stk in enumerate(h_data["stocks"])
                                 ]
                             if run_summary["top_sectors"] or run_summary["top_stocks"]:
                                 run_summary["horizon"] = h_candidate
