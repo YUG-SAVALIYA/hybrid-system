@@ -67,19 +67,19 @@ class FundamentalProfitabilityService:
         }
 
         # ── 2. Bulk P&L fetch (sales + operating_profit) ─────────────────────
-        overview_ids = [
-            s["overview_id"] for s in selections
-            if s["overview_id"] and s["profit_loss"]["comparable"]
+        source_company_ids = [
+            s["source_company_id"] for s in selections
+            if s["source_company_id"] and s["profit_loss"]["comparable"]
         ]
-        pl_data: dict = {}   # {str(overview_id): {period: (sales, op_profit)}}
-        if overview_ids:
+        pl_data: dict = {}   # {str(source_company_id): {period: (sales, op_profit)}}
+        if source_company_ids:
             pl_rows = self._src.execute(
                 text("""
                     SELECT company_id, period, sales, operating_profit
                     FROM company_profit_losses
                     WHERE company_id = ANY(:cids)
                 """),
-                {"cids": overview_ids},
+                {"cids": source_company_ids},
             ).fetchall()
             for r in pl_rows:
                 cid = str(r.company_id)
@@ -106,9 +106,9 @@ class FundamentalProfitabilityService:
             trend_status = "UNAVAILABLE"
             l_margin_avail = False; p_margin_avail = False; trend_avail = False
 
-            if pl_info["comparable"] and s["overview_id"]:
-                oid = str(s["overview_id"])
-                periods = pl_data.get(oid, {})
+            if pl_info["comparable"] and s["source_company_id"]:
+                scid = str(s["source_company_id"])
+                periods = pl_data.get(scid, {})
                 l_row = periods.get(pl_info["latest_period"])
                 p_row = periods.get(pl_info["previous_period"])
 

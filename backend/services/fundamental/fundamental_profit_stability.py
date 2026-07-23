@@ -44,16 +44,16 @@ class FundamentalProfitStabilityService:
         """)
         
         records = self._src.execute(query).fetchall()
-        overview_ids = [r.overview_id for r in records if r.overview_id]
+        source_company_ids = [r.source_company_id for r in records if r.source_company_id]
         
         pl_data_map = {}
-        if overview_ids:
+        if source_company_ids:
             pl_query = text("""
                 SELECT company_id, period, net_profit
                 FROM company_profit_losses
                 WHERE company_id = ANY(:cids)
             """)
-            pl_records = self._src.execute(pl_query, {"cids": overview_ids}).fetchall()
+            pl_records = self._src.execute(pl_query, {"cids": source_company_ids}).fetchall()
             for r in pl_records:
                 cid = r.company_id
                 if cid not in pl_data_map:
@@ -72,8 +72,8 @@ class FundamentalProfitStabilityService:
             
             # 1-3. Find valid annual confirmed periods and sort
             valid_periods = []
-            if overview_id and overview_id in pl_data_map:
-                all_periods = list(pl_data_map[overview_id].keys())
+            if source_comp_id and source_comp_id in pl_data_map:
+                all_periods = list(pl_data_map[source_comp_id].keys())
                 valid_periods = _classify_and_filter_periods(all_periods)
                 # valid_periods is already sorted from newest to oldest by period_end
                 
@@ -87,7 +87,7 @@ class FundamentalProfitStabilityService:
                         
                     p_dict = valid_periods[i]
                     orig_p = p_dict["original_period"]
-                    pat = pl_data_map[overview_id].get(orig_p)
+                    pat = pl_data_map[source_comp_id].get(orig_p)
                     
                     # 7. Stop at missing net profit
                     if pat is None:

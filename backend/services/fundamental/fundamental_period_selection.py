@@ -80,33 +80,33 @@ class FundamentalPeriodSelectionService:
             LEFT JOIN company_overviews co ON c.share_symbol = co.share_symbol
         """)
         companies = self._src.execute(query_companies).fetchall()
-        overview_ids = [c.overview_id for c in companies if c.overview_id]
+        source_company_ids = [c.source_company_id for c in companies if c.source_company_id]
 
         pl_periods_map = {}
         bs_periods_map = {}
         cf_periods_map = {}
 
-        if overview_ids:
+        if source_company_ids:
             pl_query = text("SELECT company_id, array_agg(DISTINCT period) as periods FROM company_profit_losses WHERE company_id = ANY(:cids) GROUP BY company_id")
-            for r in self._src.execute(pl_query, {"cids": overview_ids}).fetchall():
+            for r in self._src.execute(pl_query, {"cids": source_company_ids}).fetchall():
                 pl_periods_map[r.company_id] = r.periods
 
             bs_query = text("SELECT company_id, array_agg(DISTINCT period) as periods FROM company_balance_sheets WHERE company_id = ANY(:cids) GROUP BY company_id")
-            for r in self._src.execute(bs_query, {"cids": overview_ids}).fetchall():
+            for r in self._src.execute(bs_query, {"cids": source_company_ids}).fetchall():
                 bs_periods_map[r.company_id] = r.periods
 
             cf_query = text("SELECT company_id, array_agg(DISTINCT period) as periods FROM company_cash_flows WHERE company_id = ANY(:cids) GROUP BY company_id")
-            for r in self._src.execute(cf_query, {"cids": overview_ids}).fetchall():
+            for r in self._src.execute(cf_query, {"cids": source_company_ids}).fetchall():
                 cf_periods_map[r.company_id] = r.periods
 
         results = []
         for r in companies:
             warnings = set()
-            oid = r.overview_id
+            cid = r.source_company_id
             
-            pl_strings = pl_periods_map.get(oid, []) if oid else []
-            bs_strings = bs_periods_map.get(oid, []) if oid else []
-            cf_strings = cf_periods_map.get(oid, []) if oid else []
+            pl_strings = pl_periods_map.get(cid, []) if cid else []
+            bs_strings = bs_periods_map.get(cid, []) if cid else []
+            cf_strings = cf_periods_map.get(cid, []) if cid else []
             
             if not r.overview_id:
                 warnings.add("MISSING_COMPANY_OVERVIEW")

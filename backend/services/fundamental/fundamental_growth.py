@@ -68,20 +68,20 @@ class FundamentalGrowthService:
         }
 
         # ── 2. Bulk P&L fetch for all overview_ids in one shot ────────────────
-        overview_ids = [
-            s["overview_id"] for s in selections
-            if s["overview_id"] and s["profit_loss"]["comparable"]
+        source_company_ids = [
+            s["source_company_id"] for s in selections
+            if s["source_company_id"] and s["profit_loss"]["comparable"]
         ]
-        # pl_data: {overview_id: {period: (sales, net_profit)}}
+        # pl_data: {source_company_id: {period: (sales, net_profit)}}
         pl_data: dict = {}
-        if overview_ids:
+        if source_company_ids:
             pl_rows = self._src.execute(
                 text("""
                     SELECT company_id, period, sales, net_profit
                     FROM company_profit_losses
                     WHERE company_id = ANY(:cids)
                 """),
-                {"cids": overview_ids},
+                {"cids": source_company_ids},
             ).fetchall()
             for r in pl_rows:
                 cid = str(r.company_id)
@@ -109,9 +109,9 @@ class FundamentalGrowthService:
             np_growth_available = False
             np_transition = None
 
-            if pl_info["comparable"] and s["overview_id"]:
-                oid = str(s["overview_id"])
-                periods = pl_data.get(oid, {})
+            if pl_info["comparable"] and s["source_company_id"]:
+                scid = str(s["source_company_id"])
+                periods = pl_data.get(scid, {})
                 l_period = pl_info["latest_period"]
                 p_period = pl_info["previous_period"]
 
