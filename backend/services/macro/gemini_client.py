@@ -50,7 +50,7 @@ class GeminiCaller:
 
         for attempt in range(max_retries):
             try:
-                with httpx.Client(timeout=60.0) as client:
+                with httpx.Client(timeout=httpx.Timeout(120.0, connect=30.0)) as client:
                     response = client.post(url, headers=headers, json=payload)
                     response.raise_for_status()
                     data = response.json()
@@ -91,7 +91,15 @@ class GeminiCaller:
                         time.sleep(delay)
                         continue
                 logger.error(f"Gemini API HTTP request failed: {e}")
-                logger.error(f"Response body: {e.response.text}")
+                logger.error(f"Response body: {e.response.text if e.response else ''}")
+                raise
+            except (httpx.TimeoutException, httpx.RequestError) as e:
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2 ** attempt)
+                    logger.warning(f"Gemini API request timed out or network error ({type(e).__name__}: {e}). Retrying in {delay} seconds (Attempt {attempt + 1}/{max_retries})...")
+                    time.sleep(delay)
+                    continue
+                logger.error(f"Gemini API request failed after {max_retries} attempts: {e}")
                 raise
             except Exception as e:
                 logger.error(f"Failed to parse Gemini API response: {e}")
