@@ -246,6 +246,17 @@ class SectorDiscoveryRankingService:
             for sector in sectors
             if results[sector.entity_name]["eligible_for_selection"]
         ]
+        global_warnings: List[str] = []
+        if not eligible_names and sectors:
+            global_warnings.append(W_NO_ELIGIBLE)
+            eligible_names = [
+                sector.entity_name
+                for sector in sectors
+                if results[sector.entity_name]["score"] is not None
+            ]
+            if not eligible_names:
+                eligible_names = [sector.entity_name for sector in sectors]
+
         eligible_names.sort(
             key=lambda name: (
                 0 if results[name]["score"] is None else 1,
@@ -256,10 +267,6 @@ class SectorDiscoveryRankingService:
 
         for rank, name in enumerate(eligible_names, start=1):
             results[name]["rank"] = rank
-
-        global_warnings: List[str] = []
-        if not eligible_names and sectors:
-            global_warnings.append(W_NO_ELIGIBLE)
 
         for sector in sectors:
             details = results[sector.entity_name]

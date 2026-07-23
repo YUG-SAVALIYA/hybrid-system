@@ -287,14 +287,27 @@ class IndustryDiscoveryRankingService:
             for industry in industries
             if results[industry.entity_name]["eligible_for_selection"]
         ]
-        eligible_names.sort(key=lambda name: (-results[name]["score"], name))
-
-        for rank, name in enumerate(eligible_names, start=1):
-            results[name]["rank"] = rank
-
         global_warnings: List[str] = []
         if not eligible_names and industries:
             global_warnings.append(W_NO_ELIGIBLE)
+            eligible_names = [
+                industry.entity_name
+                for industry in industries
+                if results[industry.entity_name]["score"] is not None
+            ]
+            if not eligible_names:
+                eligible_names = [industry.entity_name for industry in industries]
+
+        eligible_names.sort(
+            key=lambda name: (
+                0 if results[name]["score"] is None else 1,
+                -(results[name]["score"] or 0.0),
+                name
+            )
+        )
+
+        for rank, name in enumerate(eligible_names, start=1):
+            results[name]["rank"] = rank
 
         for industry in industries:
             details = results[industry.entity_name]

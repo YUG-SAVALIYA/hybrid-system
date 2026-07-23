@@ -93,6 +93,8 @@ class StockDiscoveryRankingService:
             candidate for candidate in matched
             if _is_finite(candidate.final_score)
         ]
+        if not eligible and matched:
+            eligible = list(matched)
         eligible.sort(
             key=lambda candidate: (
                 -float(candidate.final_score),

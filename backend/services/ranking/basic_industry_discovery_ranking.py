@@ -295,14 +295,27 @@ class BasicIndustryDiscoveryRankingService:
             for row in basic_industries
             if results[row.entity_name]["eligible_for_selection"]
         ]
-        eligible_names.sort(key=lambda name: (-results[name]["score"], name))
-
-        for rank, name in enumerate(eligible_names, start=1):
-            results[name]["rank"] = rank
-
         global_warnings: List[str] = []
         if not eligible_names and basic_industries:
             global_warnings.append(W_NO_ELIGIBLE)
+            eligible_names = [
+                row.entity_name
+                for row in basic_industries
+                if results[row.entity_name]["score"] is not None
+            ]
+            if not eligible_names:
+                eligible_names = [row.entity_name for row in basic_industries]
+
+        eligible_names.sort(
+            key=lambda name: (
+                0 if results[name]["score"] is None else 1,
+                -(results[name]["score"] or 0.0),
+                name
+            )
+        )
+
+        for rank, name in enumerate(eligible_names, start=1):
+            results[name]["rank"] = rank
 
         for basic_industry in basic_industries:
             self._persist_group_result(
