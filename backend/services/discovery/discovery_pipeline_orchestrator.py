@@ -299,8 +299,6 @@ class DiscoveryPipelineOrchestrator:
         }
         if fundamental_count == 0:
             missing.append("company_fundamental_metrics")
-        if scored_fundamental_count == 0:
-            missing.append("company_fundamental_scores")
 
         for horizon in self._horizons:
             horizon_details: Dict[str, Any] = {}
@@ -322,8 +320,6 @@ class DiscoveryPipelineOrchestrator:
             horizon_details["company_technical_scores"] = scored_technical_count
             if technical_count == 0:
                 missing.append(f"company_technical_metrics.{horizon}")
-            if scored_technical_count == 0:
-                missing.append(f"company_technical_scores.{horizon}")
 
             details["horizons"][horizon] = horizon_details
 
