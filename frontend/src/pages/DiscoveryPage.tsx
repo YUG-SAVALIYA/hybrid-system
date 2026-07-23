@@ -331,16 +331,20 @@ function PipelineProgressTracker({
     
     if (status === "PENDING") {
       if (flowState === "PREPARING_DATA" && stage.source === "preparation") {
-        const firstUncompletedPrep = STAGES.find(
-          (s) => s.source === "preparation" && (!preparationStages[s.key] || preparationStages[s.key].status !== "COMPLETED")
-        );
+        const firstUncompletedPrep = STAGES.find((s) => {
+          if (s.source !== "preparation") return false;
+          const st = preparationStages[s.key]?.status || "";
+          return !["COMPLETED", "COMPLETED_WITH_WARNINGS", "SKIPPED"].includes(st);
+        });
         if (firstUncompletedPrep?.key === stage.key) {
           status = "RUNNING";
         }
       } else if ((flowState === "EXECUTING_DISCOVERY" || flowState === "RUNNING") && stage.source === "execution") {
-        const firstUncompletedExec = STAGES.find(
-          (s) => s.source === "execution" && (!stageResultsMap[s.key] || stageResultsMap[s.key].status !== "COMPLETED")
-        );
+        const firstUncompletedExec = STAGES.find((s) => {
+          if (s.source !== "execution") return false;
+          const st = stageResultsMap[s.key]?.status || "";
+          return !["COMPLETED", "COMPLETED_WITH_WARNINGS", "SKIPPED"].includes(st);
+        });
         if (firstUncompletedExec?.key === stage.key) {
           status = "RUNNING";
         }
