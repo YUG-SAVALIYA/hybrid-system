@@ -494,8 +494,6 @@ class DiscoveryUpstreamPreparationService:
         }
         if company_fundamental_count == 0:
             missing.append("company_fundamental_metrics")
-        if final_company_fundamental_count == 0:
-            missing.append("company_fundamental_scores")
 
         for horizon in sorted(horizons):
             horizon_details: Dict[str, Any] = {}
@@ -518,8 +516,6 @@ class DiscoveryUpstreamPreparationService:
                 .count()
             )
             horizon_details["company_technical_final_scores"] = technical_final_score_count
-            if technical_final_score_count == 0:
-                missing.append(f"company_technical_final_scores.{horizon}")
             details["horizons"][horizon] = horizon_details
 
         details["missing"] = sorted(set(missing))
