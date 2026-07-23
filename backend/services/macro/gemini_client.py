@@ -70,27 +70,29 @@ class GeminiCaller:
                 return parts[0].get("text", "")
                 
             except httpx.HTTPStatusError as e:
-                if e.response.status_code == 429:
+                status_code = e.response.status_code if e.response else 0
+                if status_code in {429, 500, 502, 503, 504}:
                     if attempt < max_retries - 1:
                         # Try to parse exact delay from response body
                         delay = base_delay * (2 ** attempt)
-                        try:
-                            err_data = e.response.json()
-                            details = err_data.get("error", {}).get("details", [])
-                            for detail in details:
-                                if "retryDelay" in detail:
-                                    retry_delay_str = detail["retryDelay"]
-                                    # "32s" -> 32.0
-                                    if retry_delay_str.endswith('s'):
-                                        delay = float(retry_delay_str[:-1]) + 1.0 # add 1s buffer
-                                    break
-                        except Exception:
-                            pass
+                        if status_code == 429:
+                            try:
+                                err_data = e.response.json()
+                                details = err_data.get("error", {}).get("details", [])
+                                for detail in details:
+                                    if "retryDelay" in detail:
+                                        retry_delay_str = detail["retryDelay"]
+                                        # "32s" -> 32.0
+                                        if retry_delay_str.endswith('s'):
+                                            delay = float(retry_delay_str[:-1]) + 1.0 # add 1s buffer
+                                        break
+                            except Exception:
+                                pass
                             
-                        logger.warning(f"Hit Gemini rate limit (429). Retrying in {delay} seconds (Attempt {attempt + 1}/{max_retries})...")
+                        logger.warning(f"Gemini API HTTP error ({status_code}). Retrying in {delay:.1f} seconds (Attempt {attempt + 1}/{max_retries})...")
                         time.sleep(delay)
                         continue
-                logger.error(f"Gemini API HTTP request failed: {e}")
+                logger.error(f"Gemini API HTTP request failed ({status_code}): {e}")
                 logger.error(f"Response body: {e.response.text if e.response else ''}")
                 raise
             except (httpx.TimeoutException, httpx.RequestError) as e:
