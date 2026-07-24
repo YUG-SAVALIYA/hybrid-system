@@ -41,7 +41,8 @@ class RunManager {
   }
 
   private notify() {
-    this.listeners.forEach(l => l(this.state));
+    const stateCopy = { ...this.state };
+    this.listeners.forEach(l => l(stateCopy));
   }
 
   getState() {

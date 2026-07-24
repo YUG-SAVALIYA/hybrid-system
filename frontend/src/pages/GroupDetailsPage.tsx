@@ -142,10 +142,11 @@ export function GroupDetailsPage() {
   const type = entityType?.toUpperCase() || "SECTOR";
   const parentSector = searchParams.get("parentSector") || searchParams.get("parent_sector") || "";
   const parentIndustry = searchParams.get("parentIndustry") || searchParams.get("parent_industry") || "";
-
   const [runState, setRunState] = useState(runManager.getState());
+  const [directResult, setDirectResult] = useState<any>(null);
   const [constituents, setConstituents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [resultLoading, setResultLoading] = useState(true);
   const [filter, setFilter] = useState("");
 
   useEffect(() => {
@@ -154,8 +155,23 @@ export function GroupDetailsPage() {
   }, []);
 
   useEffect(() => {
+    let active = true;
     if (runId) {
-      runManager.loadResult(runId).catch(console.error);
+      setResultLoading(true);
+      runManager.loadResult(runId)
+        .catch(() => {
+          fetch(`/api/v1/discovery/runs/${runId}/result`)
+            .then(res => res.json())
+            .then(data => {
+              if (active && data.success) {
+                setDirectResult(data.data);
+              }
+            })
+            .catch(console.error);
+        })
+        .finally(() => {
+          if (active) setResultLoading(false);
+        });
     }
   }, [runId]);
 
@@ -163,25 +179,35 @@ export function GroupDetailsPage() {
   const targetParentSector = parentSector.trim().toLowerCase();
   const targetParentIndustry = parentIndustry.trim().toLowerCase();
 
-  const result = runState.result;
+  const result = runState.result || directResult;
   let groupDetails: DiscoveryGroupResult | undefined;
-  if (result && result.horizons[horizon as DiscoveryHorizon]) {
-    const horizonData = result.horizons[horizon as DiscoveryHorizon];
-    if (type === "SECTOR") {
-      groupDetails = horizonData.sectors.find((s: any) => 
-        (s.name || "").trim().toLowerCase() === targetName
-      );
-    } else if (type === "INDUSTRY") {
-      groupDetails = horizonData.industries.find((i: any) => 
-        (i.name || "").trim().toLowerCase() === targetName && 
-        (!targetParentSector || (i.parent_sector || "").trim().toLowerCase() === targetParentSector)
-      );
-    } else if (type === "BASIC_INDUSTRY") {
-      groupDetails = horizonData.basic_industries.find((b: any) => 
-        (b.name || "").trim().toLowerCase() === targetName && 
-        (!targetParentIndustry || (b.parent_industry || "").trim().toLowerCase() === targetParentIndustry) && 
-        (!targetParentSector || (b.parent_sector || "").trim().toLowerCase() === targetParentSector)
-      );
+  
+  if (result && result.horizons) {
+    const targetHorizonData = result.horizons[horizon as DiscoveryHorizon];
+    const candidateDataSources = [
+      ...(targetHorizonData ? [targetHorizonData] : []),
+      ...Object.values(result.horizons).filter(h => h !== targetHorizonData)
+    ] as any[];
+
+    for (const hData of candidateDataSources) {
+      if (!hData) continue;
+      if (type === "SECTOR" && hData.sectors) {
+        groupDetails = hData.sectors.find((s: any) => 
+          (s.name || "").trim().toLowerCase() === targetName
+        );
+      } else if (type === "INDUSTRY" && hData.industries) {
+        groupDetails = hData.industries.find((i: any) => 
+          (i.name || "").trim().toLowerCase() === targetName && 
+          (!targetParentSector || (i.parent_sector || "").trim().toLowerCase() === targetParentSector)
+        );
+      } else if (type === "BASIC_INDUSTRY" && hData.basic_industries) {
+        groupDetails = hData.basic_industries.find((b: any) => 
+          (b.name || "").trim().toLowerCase() === targetName && 
+          (!targetParentIndustry || (b.parent_industry || "").trim().toLowerCase() === targetParentIndustry) && 
+          (!targetParentSector || (b.parent_sector || "").trim().toLowerCase() === targetParentSector)
+        );
+      }
+      if (groupDetails) break;
     }
   }
 
@@ -211,7 +237,7 @@ export function GroupDetailsPage() {
   }, [runId, type, name, horizon, parentSector, parentIndustry]);
 
   if (!groupDetails) {
-    if (runState.flowState === "LOADING_RESULT" || !result) {
+    if (resultLoading || runState.flowState === "LOADING_RESULT" || !result) {
       return <div className="empty-state">Loading group details for {decodeURIComponent(name || "")}...</div>;
     }
     return <div className="panel error">Group details not found for {decodeURIComponent(name || "")}</div>;
