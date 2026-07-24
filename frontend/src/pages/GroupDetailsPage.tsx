@@ -140,8 +140,8 @@ export function GroupDetailsPage() {
 
   const horizon = (searchParams.get("horizon") || "SHORT") as DiscoveryHorizon;
   const type = entityType?.toUpperCase() || "SECTOR";
-  const parentSector = searchParams.get("parent_sector") || "";
-  const parentIndustry = searchParams.get("parent_industry") || "";
+  const parentSector = searchParams.get("parentSector") || searchParams.get("parent_sector") || "";
+  const parentIndustry = searchParams.get("parentIndustry") || searchParams.get("parent_industry") || "";
 
   const [constituents, setConstituents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -154,9 +154,15 @@ export function GroupDetailsPage() {
     if (type === "SECTOR") {
       groupDetails = horizonData.sectors.find((s: any) => s.name === name);
     } else if (type === "INDUSTRY") {
-      groupDetails = horizonData.industries.find((i: any) => i.name === name && (i.parent_sector || "") === parentSector);
+      groupDetails = horizonData.industries.find((i: any) => 
+        i.name === name && (!parentSector || (i.parent_sector || "") === parentSector)
+      );
     } else if (type === "BASIC_INDUSTRY") {
-      groupDetails = horizonData.basic_industries.find((b: any) => b.name === name && (b.parent_industry || "") === parentIndustry && (b.parent_sector || "") === parentSector);
+      groupDetails = horizonData.basic_industries.find((b: any) => 
+        b.name === name && 
+        (!parentIndustry || (b.parent_industry || "") === parentIndustry) && 
+        (!parentSector || (b.parent_sector || "") === parentSector)
+      );
     }
   }
 
