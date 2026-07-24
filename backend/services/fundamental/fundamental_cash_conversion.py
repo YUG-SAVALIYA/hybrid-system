@@ -51,23 +51,23 @@ class FundamentalCashConversionService:
         if not selections:
             return
 
-        source_company_ids = [
-            s["source_company_id"] for s in selections 
-            if s["source_company_id"] and s["profit_loss_cash_flow_common"]["comparable"]
+        overview_ids = [
+            str(s["overview_id"]) for s in selections 
+            if s.get("overview_id") and s["profit_loss_cash_flow_common"]["comparable"]
         ]
         
         pl_data_map = {}
         cf_data_map = {}
 
-        if source_company_ids:
+        if overview_ids:
             pl_query = text("""
                 SELECT company_id, period, net_profit
                 FROM company_profit_losses
                 WHERE company_id = ANY(:cids)
             """)
-            pl_records = self._src.execute(pl_query, {"cids": source_company_ids}).fetchall()
+            pl_records = self._src.execute(pl_query, {"cids": overview_ids}).fetchall()
             for r in pl_records:
-                cid = r.company_id
+                cid = str(r.company_id)
                 if cid not in pl_data_map:
                     pl_data_map[cid] = {}
                 pl_data_map[cid][r.period] = r.net_profit
@@ -77,9 +77,9 @@ class FundamentalCashConversionService:
                 FROM company_cash_flows
                 WHERE company_id = ANY(:cids)
             """)
-            cf_records = self._src.execute(cf_query, {"cids": source_company_ids}).fetchall()
+            cf_records = self._src.execute(cf_query, {"cids": overview_ids}).fetchall()
             for r in cf_records:
-                cid = r.company_id
+                cid = str(r.company_id)
                 if cid not in cf_data_map:
                     cf_data_map[cid] = {}
                 cf_data_map[cid][r.period] = r.cash_from_operating_activity
@@ -95,7 +95,7 @@ class FundamentalCashConversionService:
                 continue
 
             symbol = sel["symbol"]
-            overview_id = sel["overview_id"]
+            overview_id = str(sel["overview_id"]) if sel.get("overview_id") else None
             
             # Start with warnings from the period selection natively, but only keeping CC relevant warnings?
             # Wait, period_svc returns warnings globally for a company. 
@@ -129,12 +129,12 @@ class FundamentalCashConversionService:
             
             cc_avail = False
 
-            if common_comp and source_comp_id and source_comp_id in pl_data_map and source_comp_id in cf_data_map:
-                l_pat = pl_data_map[source_comp_id].get(latest_period)
-                p_pat = pl_data_map[source_comp_id].get(prev_period)
+            if common_comp and overview_id and overview_id in pl_data_map and overview_id in cf_data_map:
+                l_pat = pl_data_map[overview_id].get(latest_period)
+                p_pat = pl_data_map[overview_id].get(prev_period)
                 
-                l_ocf = cf_data_map[source_comp_id].get(latest_period)
-                p_ocf = cf_data_map[source_comp_id].get(prev_period)
+                l_ocf = cf_data_map[overview_id].get(latest_period)
+                p_ocf = cf_data_map[overview_id].get(prev_period)
                 
                 cc_avail = (l_pat is not None and l_ocf is not None)
 
@@ -222,13 +222,14 @@ class FundamentalCashConversionService:
             return
 
         existing_records = self._disc.query(CompanyFundamentalMetric).filter_by(run_id=run_id).all()
-        existing_map = {r.source_company_id: r for r in existing_records}
+        existing_map = {str(r.source_company_id): r for r in existing_records}
 
         import copy
         for v in values_to_upsert:
             cid = v["source_company_id"]
-            if cid in existing_map:
-                rec = existing_map[cid]
+            str_cid = str(cid) if cid else None
+            if str_cid and str_cid in existing_map:
+                rec = existing_map[str_cid]
                 if not rec.sector and v["sector"]: rec.sector = v["sector"]
                 if not rec.industry and v["industry"]: rec.industry = v["industry"]
                 if not rec.basic_industry and v["basic_industry"]: rec.basic_industry = v["basic_industry"]

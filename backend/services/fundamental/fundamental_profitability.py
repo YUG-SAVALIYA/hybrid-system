@@ -67,19 +67,19 @@ class FundamentalProfitabilityService:
         }
 
         # ── 2. Bulk P&L fetch (sales + operating_profit) ─────────────────────
-        source_company_ids = [
-            s["source_company_id"] for s in selections
-            if s["source_company_id"] and s["profit_loss"]["comparable"]
+        overview_ids = [
+            str(s["overview_id"]) for s in selections
+            if s.get("overview_id") and s["profit_loss"]["comparable"]
         ]
-        pl_data: dict = {}   # {str(source_company_id): {period: (sales, op_profit)}}
-        if source_company_ids:
+        pl_data: dict = {}   # {str(overview_id): {period: (sales, op_profit)}}
+        if overview_ids:
             pl_rows = self._src.execute(
                 text("""
                     SELECT company_id, period, sales, operating_profit
                     FROM company_profit_losses
                     WHERE company_id = ANY(:cids)
                 """),
-                {"cids": source_company_ids},
+                {"cids": overview_ids},
             ).fetchall()
             for r in pl_rows:
                 cid = str(r.company_id)
@@ -88,7 +88,7 @@ class FundamentalProfitabilityService:
         # ── 3. Existing records ───────────────────────────────────────────────
         existing_records = self._disc.query(CompanyFundamentalMetric).filter_by(run_id=run_id).all()
         existing_map: dict[str, CompanyFundamentalMetric] = {
-            r.source_company_id: r for r in existing_records
+            str(r.source_company_id): r for r in existing_records
         }
 
         # ── 4. Process each company ───────────────────────────────────────────
@@ -97,7 +97,8 @@ class FundamentalProfitabilityService:
             if not cid:
                 continue
 
-            hi = hierarchy.get(str(cid), {})
+            str_cid = str(cid)
+            hi = hierarchy.get(str_cid, {})
             warnings = list(s["warnings"])
             pl_info = s["profit_loss"]
 
@@ -106,9 +107,9 @@ class FundamentalProfitabilityService:
             trend_status = "UNAVAILABLE"
             l_margin_avail = False; p_margin_avail = False; trend_avail = False
 
-            if pl_info["comparable"] and s["source_company_id"]:
-                scid = str(s["source_company_id"])
-                periods = pl_data.get(scid, {})
+            if pl_info["comparable"] and s.get("overview_id"):
+                oid = str(s["overview_id"])
+                periods = pl_data.get(oid, {})
                 l_row = periods.get(pl_info["latest_period"])
                 p_row = periods.get(pl_info["previous_period"])
 
@@ -164,8 +165,8 @@ class FundamentalProfitabilityService:
             }
             unique_warnings = sorted(set(warnings))
 
-            if cid in existing_map:
-                rec = existing_map[cid]
+            if str_cid in existing_map:
+                rec = existing_map[str_cid]
                 if not rec.sector and hi.get("sector"):      rec.sector = hi["sector"]
                 if not rec.industry and hi.get("industry"):  rec.industry = hi["industry"]
                 if not rec.basic_industry and hi.get("basic_industry"): rec.basic_industry = hi["basic_industry"]

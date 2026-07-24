@@ -478,7 +478,12 @@ class MacroIndustryImpactService:
         return self._llm if self._llm is not None else _LLMCaller()
 
     def _llm_call(self, prompt: str) -> str:
-        return self._get_llm().call(prompt)
+        try:
+            return self._get_llm().call(prompt)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"LLM call failed: {e}")
+            return ""
 
     def _latest_summary(self, run_id: str) -> Optional[MacroSummary]:
         return (
@@ -661,7 +666,7 @@ class MacroIndustryImpactService:
                 sector, industry_batch, raw, allowed_refs
             )
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
             results = list(executor.map(_process_industry_batch, batch_args_list))
 
         for sector, industry_batch, (batch_outputs, batch_warnings_by_industry, batch_warnings, repaired) in results:

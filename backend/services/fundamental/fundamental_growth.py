@@ -30,6 +30,16 @@ def _safe(v) -> Optional[float]:
         return None
 
 
+def _is_finite(v) -> bool:
+    try:
+        if v is None:
+            return False
+        f = float(v)
+        return not (math.isnan(f) or math.isinf(f))
+    except (TypeError, ValueError):
+        return False
+
+
 def _get_np_transition(prev: float, latest: float) -> str:
     if prev > 0:
         return "STANDARD_GROWTH"
@@ -38,9 +48,20 @@ def _get_np_transition(prev: float, latest: float) -> str:
         if latest > prev: return "LOSS_NARROWED"
         if latest < prev: return "LOSS_WIDENED"
         return "LOSS_UNCHANGED"
-    if latest > 0: return "ZERO_BASE_TO_PROFIT"
-    if latest < 0: return "ZERO_BASE_TO_LOSS"
-    return "ZERO_BASE_UNCHANGED"
+    if latest > 0: return "ZERO_TO_PROFIT"
+    if latest < 0: return "ZERO_TO_LOSS"
+    return "ZERO_UNCHANGED"
+
+
+def _eval_net_profit_growth(latest, prev):
+    if not (_is_finite(latest) and _is_finite(prev)):
+        return None, "UNAVAILABLE", False
+    l_f, p_f = float(latest), float(prev)
+    transition = _get_np_transition(p_f, l_f)
+    if p_f > 0:
+        pct = round(((l_f - p_f) / p_f) * 100.0, 2)
+        return pct, transition, True
+    return None, transition, False
 
 
 class FundamentalGrowthService:
@@ -68,20 +89,20 @@ class FundamentalGrowthService:
         }
 
         # ── 2. Bulk P&L fetch for all overview_ids in one shot ────────────────
-        source_company_ids = [
-            s["source_company_id"] for s in selections
-            if s["source_company_id"] and s["profit_loss"]["comparable"]
+        overview_ids = [
+            str(s["overview_id"]) for s in selections
+            if s.get("overview_id") and s["profit_loss"]["comparable"]
         ]
-        # pl_data: {source_company_id: {period: (sales, net_profit)}}
+        # pl_data: {overview_id: {period: (sales, net_profit)}}
         pl_data: dict = {}
-        if source_company_ids:
+        if overview_ids:
             pl_rows = self._src.execute(
                 text("""
                     SELECT company_id, period, sales, net_profit
                     FROM company_profit_losses
                     WHERE company_id = ANY(:cids)
                 """),
-                {"cids": source_company_ids},
+                {"cids": overview_ids},
             ).fetchall()
             for r in pl_rows:
                 cid = str(r.company_id)
@@ -90,7 +111,7 @@ class FundamentalGrowthService:
         # ── 3. Fetch existing DB records for this run ─────────────────────────
         existing_records = self._disc.query(CompanyFundamentalMetric).filter_by(run_id=run_id).all()
         existing_map: dict[str, CompanyFundamentalMetric] = {
-            r.source_company_id: r for r in existing_records
+            str(r.source_company_id): r for r in existing_records
         }
 
         # ── 4. Process each company in plain Python ───────────────────────────
@@ -99,7 +120,8 @@ class FundamentalGrowthService:
             if not cid:
                 continue
 
-            hi = hierarchy.get(str(cid), {})
+            str_cid = str(cid)
+            hi = hierarchy.get(str_cid, {})
             warnings = list(s["warnings"])
             pl_info = s["profit_loss"]
 
@@ -109,38 +131,21 @@ class FundamentalGrowthService:
             np_growth_available = False
             np_transition = None
 
-            if pl_info["comparable"] and s["source_company_id"]:
-                scid = str(s["source_company_id"])
-                periods = pl_data.get(scid, {})
+            if pl_info["comparable"] and s.get("overview_id"):
+                oid = str(s["overview_id"])
+                periods = pl_data.get(oid, {})
                 l_period = pl_info["latest_period"]
                 p_period = pl_info["previous_period"]
 
-                l_row = periods.get(l_period)
-                p_row = periods.get(p_period)
+                if l_period in periods and p_period in periods:
+                    l_sales, l_np = periods[l_period]
+                    p_sales, p_np = periods[p_period]
 
-                l_sales = l_row[0] if l_row else None
-                p_sales = p_row[0] if p_row else None
-                l_np    = l_row[1] if l_row else None
-                p_np    = p_row[1] if p_row else None
-
-                if l_sales is None: warnings.append("MISSING_LATEST_SALES")
-                if p_sales is None: warnings.append("MISSING_PREVIOUS_SALES")
-                if l_sales is not None and p_sales is not None:
-                    if p_sales > 0:
-                        sales_growth_pct = ((l_sales / p_sales) - 1.0) * 100.0
+                    if _is_finite(l_sales) and _is_finite(p_sales) and float(p_sales) > 0:
+                        sales_growth_pct = round(((float(l_sales) - float(p_sales)) / float(p_sales)) * 100.0, 2)
                         sales_growth_available = True
-                    else:
-                        warnings.append("INVALID_PREVIOUS_SALES_BASE")
 
-                if l_np is None: warnings.append("MISSING_LATEST_NET_PROFIT")
-                if p_np is None: warnings.append("MISSING_PREVIOUS_NET_PROFIT")
-                if l_np is not None and p_np is not None:
-                    np_transition = _get_np_transition(p_np, l_np)
-                    if p_np > 0:
-                        np_growth_pct = ((l_np / p_np) - 1.0) * 100.0
-                        np_growth_available = True
-                    else:
-                        warnings.append("NON_STANDARD_NET_PROFIT_BASE")
+                    np_growth_pct, np_transition, np_growth_available = _eval_net_profit_growth(l_np, p_np)
             else:
                 if not pl_info["comparable"]:
                     warnings.append("INSUFFICIENT_PROFIT_LOSS_PERIODS")
@@ -157,8 +162,8 @@ class FundamentalGrowthService:
             }
             unique_warnings = sorted(set(warnings))
 
-            if cid in existing_map:
-                rec = existing_map[cid]
+            if str_cid in existing_map:
+                rec = existing_map[str_cid]
                 rec.sector = rec.sector or hi.get("sector", "")
                 rec.industry = rec.industry or hi.get("industry", "")
                 rec.basic_industry = rec.basic_industry or hi.get("basic_industry", "")
@@ -172,7 +177,7 @@ class FundamentalGrowthService:
                 new_rec = CompanyFundamentalMetric(
                     id=str(uuid.uuid4()),
                     run_id=run_id,
-                    source_company_id=str(cid),
+                    source_company_id=str_cid,
                     symbol=s.get("symbol", ""),
                     sector=hi.get("sector", ""),
                     industry=hi.get("industry", ""),
@@ -180,6 +185,6 @@ class FundamentalGrowthService:
                     calculation_details={"growth": growth_detail, "warnings": unique_warnings},
                 )
                 self._disc.add(new_rec)
-                existing_map[str(cid)] = new_rec
+                existing_map[str_cid] = new_rec
 
         self._disc.commit()

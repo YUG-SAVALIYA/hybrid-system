@@ -503,7 +503,12 @@ class MacroSectorImpactService:
         return self._llm if self._llm is not None else _LLMCaller()
 
     def _llm_call(self, prompt: str) -> str:
-        return self._get_llm().call(prompt)
+        try:
+            return self._get_llm().call(prompt)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"LLM call failed: {e}")
+            return ""
 
     def _latest_summary(self, run_id: str) -> Optional[MacroSummary]:
         return (
@@ -636,7 +641,7 @@ class MacroSectorImpactService:
             )
             return sector_batch, self._validate_or_repair_batch(sector_batch, raw_text, allowed_refs)
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
             results = list(executor.map(_process_batch, self.last_batches))
             
         for sector_batch, (outputs, sector_warnings, batch_warnings, repaired) in results:

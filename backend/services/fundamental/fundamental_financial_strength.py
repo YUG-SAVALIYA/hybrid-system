@@ -66,19 +66,19 @@ class FundamentalFinancialStrengthService:
         }
 
         # ── 2. Bulk balance-sheet fetch ───────────────────────────────────────
-        source_company_ids = [
-            s["source_company_id"] for s in selections
-            if s["source_company_id"] and s["balance_sheet"]["comparable"]
+        overview_ids = [
+            str(s["overview_id"]) for s in selections
+            if s.get("overview_id") and s["balance_sheet"]["comparable"]
         ]
-        bs_data: dict = {}   # {str(source_company_id): {period: (ec, reserves, borrowings)}}
-        if source_company_ids:
+        bs_data: dict = {}   # {str(overview_id): {period: (ec, reserves, borrowings)}}
+        if overview_ids:
             bs_rows = self._src.execute(
                 text("""
                     SELECT company_id, period, equity_capital, reserves, borrowings
                     FROM company_balance_sheets
                     WHERE company_id = ANY(:cids)
                 """),
-                {"cids": source_company_ids},
+                {"cids": overview_ids},
             ).fetchall()
             for r in bs_rows:
                 cid = str(r.company_id)
@@ -89,7 +89,7 @@ class FundamentalFinancialStrengthService:
         # ── 3. Existing records ───────────────────────────────────────────────
         existing_records = self._disc.query(CompanyFundamentalMetric).filter_by(run_id=run_id).all()
         existing_map: dict[str, CompanyFundamentalMetric] = {
-            r.source_company_id: r for r in existing_records
+            str(r.source_company_id): r for r in existing_records
         }
 
         # ── 4. Process each company ───────────────────────────────────────────
@@ -98,7 +98,8 @@ class FundamentalFinancialStrengthService:
             if not cid:
                 continue
 
-            hi = hierarchy.get(str(cid), {})
+            str_cid = str(cid)
+            hi = hierarchy.get(str_cid, {})
             warnings = list(s["warnings"])
             bs_info = s["balance_sheet"]
 
@@ -118,9 +119,9 @@ class FundamentalFinancialStrengthService:
             l_eq_avail = False; p_eq_avail = False
             dte_avail = False; trend_avail = False; fs_avail = False
 
-            if bs_info["comparable"] and s["source_company_id"]:
-                scid = str(s["source_company_id"])
-                periods = bs_data.get(scid, {})
+            if bs_info["comparable"] and s.get("overview_id"):
+                oid = str(s["overview_id"])
+                periods = bs_data.get(oid, {})
                 l_row = periods.get(bs_info["latest_period"])
                 p_row = periods.get(bs_info["previous_period"])
 
@@ -210,8 +211,8 @@ class FundamentalFinancialStrengthService:
             }
             unique_warnings = sorted(set(warnings))
 
-            if cid in existing_map:
-                rec = existing_map[cid]
+            if str_cid in existing_map:
+                rec = existing_map[str_cid]
                 if not rec.sector and sector:              rec.sector = sector
                 if not rec.industry and industry:          rec.industry = industry
                 if not rec.basic_industry and basic_industry: rec.basic_industry = basic_industry

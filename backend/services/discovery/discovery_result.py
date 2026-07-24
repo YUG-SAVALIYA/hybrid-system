@@ -181,10 +181,11 @@ class DiscoveryResultService:
                 except Exception:
                     pass
 
-        # Sort the items in each run by rank
+        # Sort the items in each run by rank and take top 3
         for run_id in summary_by_run:
             for key in ["top_sectors", "top_industries", "top_basic_industries", "top_stocks"]:
                 summary_by_run[run_id][key].sort(key=lambda x: x["rank"] or 9999)
+                summary_by_run[run_id][key] = summary_by_run[run_id][key][:3]
 
         return [summary_by_run[run.id] for run in runs]
 

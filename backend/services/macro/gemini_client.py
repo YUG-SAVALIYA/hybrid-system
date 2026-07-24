@@ -72,9 +72,15 @@ class GeminiCaller:
             except httpx.HTTPStatusError as e:
                 status_code = e.response.status_code if e.response else 0
                 if status_code in {429, 500, 502, 503, 504}:
+                    resp_text = e.response.text if e.response else ""
+                    # Daily quota exhaustion (RESOURCE_EXHAUSTED) will not reset in seconds; fail fast
+                    if status_code == 429 and ("RESOURCE_EXHAUSTED" in resp_text or "PerDay" in resp_text):
+                        if attempt >= 1:
+                            logger.warning("Gemini API daily quota limit hit (RESOURCE_EXHAUSTED). Failing fast to use fallbacks.")
+                            raise
+                    
                     if attempt < max_retries - 1:
-                        # Try to parse exact delay from response body
-                        delay = base_delay * (2 ** attempt)
+                        delay = min(base_delay * (2 ** attempt), 10.0)
                         if status_code == 429:
                             try:
                                 err_data = e.response.json()
@@ -82,11 +88,16 @@ class GeminiCaller:
                                 for detail in details:
                                     if "retryDelay" in detail:
                                         retry_delay_str = detail["retryDelay"]
-                                        # "32s" -> 32.0
                                         if retry_delay_str.endswith('s'):
-                                            delay = float(retry_delay_str[:-1]) + 1.0 # add 1s buffer
+                                            parsed_delay = float(retry_delay_str[:-1]) + 1.0
+                                            if parsed_delay > 15.0:
+                                                logger.warning(f"Gemini API retryDelay ({parsed_delay:.1f}s) too long. Failing fast.")
+                                                raise
+                                            delay = min(parsed_delay, 10.0)
                                         break
-                            except Exception:
+                            except Exception as parse_err:
+                                if isinstance(parse_err, httpx.HTTPStatusError):
+                                    raise
                                 pass
                             
                         logger.warning(f"Gemini API HTTP error ({status_code}). Retrying in {delay:.1f} seconds (Attempt {attempt + 1}/{max_retries})...")

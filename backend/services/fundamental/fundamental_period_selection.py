@@ -26,44 +26,21 @@ def _classify_and_filter_periods(period_strings: list[str] | None) -> list[dict]
     for p in set(period_strings):
         if not p: continue
         parsed = PeriodParser.parse(p)
-        if parsed["parse_status"] != "VALID":
-            orig = parsed["original_period"].lower()
-            if "q1" in orig or "q2" in orig or "q3" in orig or "q4" in orig or "quarter" in orig:
-                parsed["classification"] = "QUARTERLY"
-            else:
-                parsed["classification"] = "UNKNOWN"
-        else:
+        if parsed["parse_status"] == "VALID":
             parsed["classification"] = "ANNUAL_CONFIRMED"
-        parsed_list.append(parsed)
-        
-    valid_months = set()
-    for p in parsed_list:
-        if p["parse_status"] == "VALID":
-            parts = p["original_period"].strip().split()
-            if len(parts) > 0:
-                valid_months.add(parts[0])
-                
-    if len(valid_months) > 1:
-        for p in parsed_list:
-            if p["classification"] == "ANNUAL_CONFIRMED":
-                p["classification"] = "AMBIGUOUS_PERIOD_CADENCE"
-                
-    years_seen = {}
-    for p in parsed_list:
-        if p["classification"] == "ANNUAL_CONFIRMED":
-            fy = p["financial_year"]
-            if fy not in years_seen:
-                years_seen[fy] = []
-            years_seen[fy].append(p)
+            parsed_list.append(parsed)
             
-    for fy, items in years_seen.items():
-        if len(items) > 1:
-            for item in items:
-                item["classification"] = "DUPLICATE_CALENDAR_YEAR"
-                
-    confirmed = [p for p in parsed_list if p["classification"] == "ANNUAL_CONFIRMED"]
-    confirmed.sort(key=lambda x: x["period_end"], reverse=True)
-    return confirmed
+    parsed_list.sort(key=lambda x: x["period_end"], reverse=True)
+    
+    unique_periods = []
+    seen_years = set()
+    for p in parsed_list:
+        fy = p["financial_year"]
+        if fy not in seen_years:
+            seen_years.add(fy)
+            unique_periods.append(p)
+            
+    return unique_periods
 
 
 class FundamentalPeriodSelectionService:
@@ -80,33 +57,33 @@ class FundamentalPeriodSelectionService:
             LEFT JOIN company_overviews co ON c.share_symbol = co.share_symbol
         """)
         companies = self._src.execute(query_companies).fetchall()
-        source_company_ids = [c.source_company_id for c in companies if c.source_company_id]
+        overview_ids = [str(c.overview_id) for c in companies if c.overview_id]
 
         pl_periods_map = {}
         bs_periods_map = {}
         cf_periods_map = {}
 
-        if source_company_ids:
+        if overview_ids:
             pl_query = text("SELECT company_id, array_agg(DISTINCT period) as periods FROM company_profit_losses WHERE company_id = ANY(:cids) GROUP BY company_id")
-            for r in self._src.execute(pl_query, {"cids": source_company_ids}).fetchall():
-                pl_periods_map[r.company_id] = r.periods
+            for r in self._src.execute(pl_query, {"cids": overview_ids}).fetchall():
+                pl_periods_map[str(r.company_id)] = r.periods
 
             bs_query = text("SELECT company_id, array_agg(DISTINCT period) as periods FROM company_balance_sheets WHERE company_id = ANY(:cids) GROUP BY company_id")
-            for r in self._src.execute(bs_query, {"cids": source_company_ids}).fetchall():
-                bs_periods_map[r.company_id] = r.periods
+            for r in self._src.execute(bs_query, {"cids": overview_ids}).fetchall():
+                bs_periods_map[str(r.company_id)] = r.periods
 
             cf_query = text("SELECT company_id, array_agg(DISTINCT period) as periods FROM company_cash_flows WHERE company_id = ANY(:cids) GROUP BY company_id")
-            for r in self._src.execute(cf_query, {"cids": source_company_ids}).fetchall():
-                cf_periods_map[r.company_id] = r.periods
+            for r in self._src.execute(cf_query, {"cids": overview_ids}).fetchall():
+                cf_periods_map[str(r.company_id)] = r.periods
 
         results = []
         for r in companies:
             warnings = set()
-            cid = r.source_company_id
+            oid = str(r.overview_id) if r.overview_id else None
             
-            pl_strings = pl_periods_map.get(cid, []) if cid else []
-            bs_strings = bs_periods_map.get(cid, []) if cid else []
-            cf_strings = cf_periods_map.get(cid, []) if cid else []
+            pl_strings = pl_periods_map.get(oid, []) if oid else []
+            bs_strings = bs_periods_map.get(oid, []) if oid else []
+            cf_strings = cf_periods_map.get(oid, []) if oid else []
             
             if not r.overview_id:
                 warnings.add("MISSING_COMPANY_OVERVIEW")
