@@ -143,25 +143,44 @@ export function GroupDetailsPage() {
   const parentSector = searchParams.get("parentSector") || searchParams.get("parent_sector") || "";
   const parentIndustry = searchParams.get("parentIndustry") || searchParams.get("parent_industry") || "";
 
+  const [runState, setRunState] = useState(runManager.getState());
   const [constituents, setConstituents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("");
 
-  const result = runManager.getState().result;
+  useEffect(() => {
+    const unsubscribe = runManager.subscribe(setRunState);
+    return () => { unsubscribe(); };
+  }, []);
+
+  useEffect(() => {
+    if (runId) {
+      runManager.loadResult(runId).catch(console.error);
+    }
+  }, [runId]);
+
+  const targetName = decodeURIComponent(name || "").trim().toLowerCase();
+  const targetParentSector = parentSector.trim().toLowerCase();
+  const targetParentIndustry = parentIndustry.trim().toLowerCase();
+
+  const result = runState.result;
   let groupDetails: DiscoveryGroupResult | undefined;
   if (result && result.horizons[horizon as DiscoveryHorizon]) {
     const horizonData = result.horizons[horizon as DiscoveryHorizon];
     if (type === "SECTOR") {
-      groupDetails = horizonData.sectors.find((s: any) => s.name === name);
+      groupDetails = horizonData.sectors.find((s: any) => 
+        (s.name || "").trim().toLowerCase() === targetName
+      );
     } else if (type === "INDUSTRY") {
       groupDetails = horizonData.industries.find((i: any) => 
-        i.name === name && (!parentSector || (i.parent_sector || "") === parentSector)
+        (i.name || "").trim().toLowerCase() === targetName && 
+        (!targetParentSector || (i.parent_sector || "").trim().toLowerCase() === targetParentSector)
       );
     } else if (type === "BASIC_INDUSTRY") {
       groupDetails = horizonData.basic_industries.find((b: any) => 
-        b.name === name && 
-        (!parentIndustry || (b.parent_industry || "") === parentIndustry) && 
-        (!parentSector || (b.parent_sector || "") === parentSector)
+        (b.name || "").trim().toLowerCase() === targetName && 
+        (!targetParentIndustry || (b.parent_industry || "").trim().toLowerCase() === targetParentIndustry) && 
+        (!targetParentSector || (b.parent_sector || "").trim().toLowerCase() === targetParentSector)
       );
     }
   }
@@ -191,15 +210,11 @@ export function GroupDetailsPage() {
     return () => { active = false; };
   }, [runId, type, name, horizon, parentSector, parentIndustry]);
 
-  useEffect(() => {
-    if (runId && runManager.getState().activeRunId !== runId) {
-      runManager.loadResult(runId).catch(console.error);
-    }
-  }, [runId]);
-
   if (!groupDetails) {
-    if (runManager.getState().flowState === "LOADING_RESULT") return <div className="empty-state">Loading group details...</div>;
-    return <div className="panel error">Group details not found for {name}</div>;
+    if (runState.flowState === "LOADING_RESULT" || !result) {
+      return <div className="empty-state">Loading group details for {decodeURIComponent(name || "")}...</div>;
+    }
+    return <div className="panel error">Group details not found for {decodeURIComponent(name || "")}</div>;
   }
 
   const horizonLabel = horizon === "LONG" ? "1 Month (1M)" : horizon === "MID" ? "1 Week (1W)" : "1 Day (1D)";
